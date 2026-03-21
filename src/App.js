@@ -28,6 +28,66 @@ async function hashPassword(password) {
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+// ── Session Management ────────────────────────────────────────────────────────
+const SESSION_KEY = "hiveboard_session";
+const SESSION_EXPIRY_DAYS = 30;
+
+function saveSession(user) {
+  const session = {
+    user,
+    expiresAt: Date.now() + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+  };
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+}
+
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    if (Date.now() > session.expiresAt) {
+      localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return session.user;
+  } catch { return null; }
+}
+
+function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+}
+
+// ── Biometric Authentication ──────────────────────────────────────────────────
+function isBiometricSupported() {
+  return window.PublicKeyCredential !== undefined &&
+    typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === "function";
+}
+
+async function checkBiometricAvailable() {
+  if (!isBiometricSupported()) return false;
+  try {
+    return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+  } catch { return false; }
+}
+
+async function verifyBiometric(userId) {
+  try {
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const credential = await navigator.credentials.get({
+      publicKey: {
+        challenge,
+        timeout: 60000,
+        userVerification: "required",
+        rpId: window.location.hostname,
+      },
+    });
+    return !!credential;
+  } catch (e) {
+    // User cancelled or biometric failed
+    return false;
+  }
+}
+
 // ── Push Notifications ────────────────────────────────────────────────────────
 const VAPID_PUBLIC_KEY = process.env.REACT_APP_VAPID_PUBLIC_KEY;
 
@@ -591,6 +651,23 @@ export default function App() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [filterMember, setFilterMember] = useState("all");
   const [toast, setToast] = useState(null);
+  const [sessionUser, setSessionUser] = useState(null);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
+
+  // Check for saved session and biometric support on mount
+  useEffect(() => {
+    async function init() {
+      const saved = loadSession();
+      const bioAvail = await checkBiometricAvailable();
+      setBiometricAvailable(bioAvail);
+      if (saved) {
+        setSessionUser(saved);
+        setShowBiometricPrompt(true);
+      }
+    }
+    init();
+  }, []);
 
   function showToast(msg, type = "success") { setToast({ msg, type }); }
 
@@ -617,16 +694,44 @@ export default function App() {
       const rows = await sb(`users?id=eq.${encodeURIComponent(loginId.trim())}&password_hash=eq.${hash}&select=*`);
       if (!rows || rows.length === 0) { setLoginErr("Invalid ID or password."); setAppLoading(false); return; }
       const user = rows[0];
-      setCurrentUser(user); setLoginId(""); setLoginPw("");
-      await Promise.all([fetchUsers(), fetchTasks()]);
-      setPage(user.role === "admin" ? "overview" : "tasks");
-      // Register push notifications for this device
-      registerPush(user.id);
+      saveSession(user);
+      await resumeSession(user);
     } catch (e) { setLoginErr("Login failed: " + e.message); }
     setAppLoading(false);
   }
 
-  function logout() { setCurrentUser(null); setUsers([]); setTasks([]); setPage("tasks"); }
+  async function resumeSession(user) {
+    setCurrentUser(user); setLoginId(""); setLoginPw("");
+    await Promise.all([fetchUsers(), fetchTasks()]);
+    setPage(user.role === "admin" ? "overview" : "tasks");
+    registerPush(user.id);
+  }
+
+  async function handleBiometricLogin() {
+    setAppLoading(true);
+    const verified = await verifyBiometric(sessionUser.id);
+    if (verified) {
+      setShowBiometricPrompt(false);
+      await resumeSession(sessionUser);
+    } else {
+      setShowBiometricPrompt(false);
+      setSessionUser(null);
+      clearSession();
+    }
+    setAppLoading(false);
+  }
+
+  function skipBiometric() {
+    setShowBiometricPrompt(false);
+    setSessionUser(null);
+    clearSession();
+  }
+
+  function logout() {
+    clearSession();
+    setCurrentUser(null); setUsers([]); setTasks([]); setPage("tasks");
+    setSessionUser(null); setShowBiometricPrompt(false);
+  }
 
   async function createTask(form) {
     await sb("tasks", { method: "POST", prefer: "return=representation", body: JSON.stringify({ title: form.title, description: form.description || null, deadline: form.deadline || null, urgent: form.urgent, assigned_to: form.assignedTo, status: "incomplete", created_by: currentUser.id }) });
@@ -690,6 +795,51 @@ export default function App() {
     if (!a.urgent && b.urgent) return 1;
     return new Date(b.created_at) - new Date(a.created_at);
   });
+
+  // ── Biometric Prompt ────────────────────────────────────────────────────────
+  if (showBiometricPrompt && sessionUser) {
+    return (
+      <>
+        <style>{STYLES}</style>
+        <div className="login-wrap">
+          <div className="login-card" style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 56, marginBottom: 16 }}>
+              {biometricAvailable ? "🔐" : "👋"}
+            </div>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 600, marginBottom: 8 }}>
+              Welcome back,
+            </div>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 600, fontStyle: "italic", marginBottom: 4 }}>
+              {sessionUser.name}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 32 }}>{sessionUser.id}</div>
+
+            {biometricAvailable ? (
+              <>
+                <button className="btn-primary w-full" style={{ padding: 14, borderRadius: 6, fontSize: 15, marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+                  onClick={handleBiometricLogin} disabled={appLoading}>
+                  {appLoading ? "Verifying…" : "🔐 Use Face ID / Touch ID"}
+                </button>
+                <button className="btn-ghost w-full" style={{ padding: 12, borderRadius: 6 }} onClick={skipBiometric}>
+                  Use Password Instead
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="btn-primary w-full" style={{ padding: 14, borderRadius: 6, fontSize: 15, marginBottom: 12 }}
+                  onClick={() => { setShowBiometricPrompt(false); resumeSession(sessionUser); }} disabled={appLoading}>
+                  {appLoading ? "Loading…" : `Continue as ${sessionUser.name}`}
+                </button>
+                <button className="btn-ghost w-full" style={{ padding: 12, borderRadius: 6 }} onClick={skipBiometric}>
+                  Sign in as someone else
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
 
   // ── Login ───────────────────────────────────────────────────────────────────
   if (!currentUser) {
