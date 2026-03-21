@@ -58,34 +58,15 @@ function clearSession() {
 }
 
 // ── Biometric Authentication ──────────────────────────────────────────────────
-function isBiometricSupported() {
-  return window.PublicKeyCredential !== undefined &&
-    typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === "function";
-}
-
 async function checkBiometricAvailable() {
-  if (!isBiometricSupported()) return false;
+  // Only return true if platform supports it AND we're not on iOS Safari
+  // iOS requires full passkey registration flow which we don't support yet
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  if (isIOS) return false;
+  if (!window.PublicKeyCredential) return false;
   try {
     return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
   } catch { return false; }
-}
-
-async function verifyBiometric(userId) {
-  try {
-    const challenge = crypto.getRandomValues(new Uint8Array(32));
-    const credential = await navigator.credentials.get({
-      publicKey: {
-        challenge,
-        timeout: 60000,
-        userVerification: "required",
-        rpId: window.location.hostname,
-      },
-    });
-    return !!credential;
-  } catch (e) {
-    // User cancelled or biometric failed
-    return false;
-  }
 }
 
 // ── Push Notifications ────────────────────────────────────────────────────────
@@ -709,11 +690,29 @@ export default function App() {
 
   async function handleBiometricLogin() {
     setAppLoading(true);
-    const verified = await verifyBiometric(sessionUser.id);
-    if (verified) {
-      setShowBiometricPrompt(false);
-      await resumeSession(sessionUser);
-    } else {
+    try {
+      // Use the browser's native user verification (Windows Hello / Touch ID on Mac)
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      const credential = await navigator.credentials.get({
+        publicKey: {
+          challenge,
+          timeout: 60000,
+          userVerification: "required",
+          rpId: window.location.hostname,
+          allowCredentials: [],
+        },
+      }).catch(() => null);
+
+      if (credential) {
+        setShowBiometricPrompt(false);
+        await resumeSession(sessionUser);
+      } else {
+        // Biometric cancelled — fall back to password login
+        setShowBiometricPrompt(false);
+        setSessionUser(null);
+        clearSession();
+      }
+    } catch {
       setShowBiometricPrompt(false);
       setSessionUser(null);
       clearSession();
@@ -818,7 +817,7 @@ export default function App() {
               <>
                 <button className="btn-primary w-full" style={{ padding: 14, borderRadius: 6, fontSize: 15, marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
                   onClick={handleBiometricLogin} disabled={appLoading}>
-                  {appLoading ? "Verifying…" : "🔐 Use Face ID / Touch ID"}
+                  {appLoading ? "Verifying…" : "🔐 Use Biometrics"}
                 </button>
                 <button className="btn-ghost w-full" style={{ padding: 12, borderRadius: 6 }} onClick={skipBiometric}>
                   Use Password Instead
