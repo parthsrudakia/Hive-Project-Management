@@ -712,6 +712,7 @@ export default function App() {
   const [sessionUser, setSessionUser] = useState(null);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
+  const [showAttentionPopup, setShowAttentionPopup] = useState(false);
 
   // Check for saved session and biometric support on mount
   useEffect(() => {
@@ -760,9 +761,15 @@ export default function App() {
 
   async function resumeSession(user) {
     setCurrentUser(user); setLoginId(""); setLoginPw("");
-    await Promise.all([fetchUsers(), fetchTasks()]);
+    const [, fetchedTasks] = await Promise.all([fetchUsers(), fetchTasks()]);
     setPage(user.role === "admin" ? "overview" : "tasks");
     registerPush(user.id);
+    // Show attention popup for admin if there are flagged tasks
+    if (user.role === "admin") {
+      const allTasks = await sb("tasks?select=*,comments(id,author,text,created_at)&order=created_at.desc");
+      const attentionCount = (allTasks || []).filter(t => t.needs_attention).length;
+      if (attentionCount > 0) setShowAttentionPopup(true);
+    }
   }
 
   async function handleBiometricLogin() {
@@ -876,18 +883,41 @@ export default function App() {
     await fetchUsers(); showToast(`${name} added as ${id}`);
   }
 
+  async function markSeen(taskId) {
+    await sb(`tasks?id=eq.${taskId}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify({ seen_by_assignee: true }) });
+    setTasks(ts => ts.map(t => t.id === taskId ? { ...t, seen_by_assignee: true } : t));
+  }
+
   const isAdmin = currentUser?.role === "admin";
   const members = users.filter(u => u.role === "member");
-  let visibleTasks = isAdmin
+
+  const allVisible = isAdmin
     ? (filterMember === "all" ? tasks : tasks.filter(t => t.assigned_to === filterMember))
     : tasks.filter(t => t.assigned_to === currentUser?.id);
-  visibleTasks = [...visibleTasks].sort((a, b) => {
+
+  const sortFn = (a, b) => {
     if (a.urgent && !b.urgent) return -1;
     if (!a.urgent && b.urgent) return 1;
     return new Date(b.created_at) - new Date(a.created_at);
-  });
+  };
 
-  // ── Biometric Prompt ────────────────────────────────────────────────────────
+  const activeTasks = [...allVisible.filter(t => t.status !== "done")].sort(sortFn);
+  const completedTasks = [...allVisible.filter(t => t.status === "done")].sort(sortFn);
+  const attentionTasks = tasks.filter(t => t.needs_attention);
+
+  const navItems = isAdmin
+    ? [
+        { id: "overview", label: "Overview", icon: <Icon.Overview /> },
+        { id: "tasks", label: "All Tasks", icon: <Icon.Task /> },
+        { id: "completed", label: "Completed", icon: <Icon.Track /> },
+        { id: "attention", label: "Needs Attention", icon: <Icon.Bell />, badge: attentionTasks.length },
+      ]
+    : [
+        { id: "tasks", label: "My Tasks", icon: <Icon.Task /> },
+        { id: "completed", label: "Completed", icon: <Icon.Track /> },
+      ];
+
+  // ── Biometric Prompt ──────────────────────────────────────────────────────
   if (showBiometricPrompt && sessionUser) {
     return (
       <>
@@ -985,7 +1015,13 @@ export default function App() {
           <div className="sidebar-section">Navigation</div>
           {navItems.map(n => (
             <div key={n.id} className={`nav-pill ${page === n.id ? "active" : ""}`} onClick={() => setPage(n.id)}>
-              {n.icon} <span>{n.label}</span>
+              {n.icon}
+              <span style={{ flex: 1 }}>{n.label}</span>
+              {n.badge > 0 && (
+                <span style={{ background: "var(--danger)", color: "#fff", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 6px", minWidth: 18, textAlign: "center" }}>
+                  {n.badge}
+                </span>
+              )}
             </div>
           ))}
 
@@ -1035,14 +1071,9 @@ export default function App() {
               <div className="page-header">
                 <div>
                   <div className="page-title">{isAdmin ? <>All <em>Tasks</em></> : <>My <em>Tasks</em></>}</div>
-                  <div className="subtitle">{visibleTasks.length} task{visibleTasks.length !== 1 ? "s" : ""}</div>
+                  <div className="subtitle">{activeTasks.length} active task{activeTasks.length !== 1 ? "s" : ""}</div>
                 </div>
                 <div className="flex gap-8 items-center">
-                  {isAdmin && tasks.some(t => t.status === "done") && (
-                    <button className="btn-danger" style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={clearDoneTasks}>
-                      <Icon.Trash /> Clear Completed
-                    </button>
-                  )}
                   <button className="btn-primary" style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={() => setShowCreate(true)}>
                     <Icon.Plus /> New Task
                   </button>
@@ -1064,9 +1095,82 @@ export default function App() {
                 </div>
               )}
 
-              {visibleTasks.length === 0
-                ? <div className="empty"><div className="empty-icon">🪐</div><div className="empty-label">No tasks {isAdmin ? "yet — create one!" : "assigned to you yet."}</div></div>
-                : visibleTasks.map(t => <TaskCard key={t.id} task={t} members={members} onClick={() => setSelectedTask(t)} />)
+              {activeTasks.length === 0
+                ? <div className="empty"><div className="empty-icon">🎉</div><div className="empty-label">All caught up! No active tasks.</div></div>
+                : activeTasks.map(t => {
+                    const isNew = !isAdmin && !t.seen_by_assignee;
+                    return (
+                      <div key={t.id} onClick={() => { if (isNew) markSeen(t.id); setSelectedTask(t); }}
+                        style={{ position: "relative" }}>
+                        {isNew && (
+                          <div style={{ position: "absolute", top: 10, right: 12, background: "var(--danger)", color: "#fff", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "2px 8px", zIndex: 1 }}>New</div>
+                        )}
+                        <div className={`task-card fadein ${t.urgent ? "urgent" : ""}`}
+                          style={{ background: isNew ? "#FFF5F5" : undefined, borderColor: isNew ? "#EDD5D5" : undefined, cursor: "pointer" }}>
+                          <div className="flex items-center justify-between mb-8">
+                            <div className="flex items-center gap-8 flex-wrap">
+                              <StatusPill status={t.status} />
+                              {t.urgent && <span className="tag tag-urgent"><Icon.Urgent /> Urgent</span>}
+                              {t.needs_attention && <span className="tag" style={{ background: "#FFF7ED", color: "#B45309", border: "1px solid #FCD34D" }}><Icon.Bell /> Needs Attention</span>}
+                              {t.track_status && (
+                                <span className="tag" style={t.track_status === "on_track" ? { background: "#F2FAF6", color: "#27664A", border: "1px solid #D5EDE3" } : { background: "#FDF2F2", color: "#C0392B", border: "1px solid #EDD5D5" }}>
+                                  {t.track_status === "on_track" ? <><Icon.Track /> On Track</> : <><Icon.OffTrack /> Off Track</>}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-sm" style={{ fontSize: 11 }}>#{t.id}</span>
+                          </div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 600, fontSize: 17, marginBottom: 6, lineHeight: 1.4 }}>{t.title}</div>
+                          {t.description && <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 10, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.description}</div>}
+                          <div className="flex items-center gap-8 flex-wrap" style={{ marginTop: 10 }}>
+                            <span className="member-chip"><Icon.User /> {members.find(m => m.id === t.assigned_to)?.name || t.assigned_to}</span>
+                            {t.comments?.length > 0 && <span className="member-chip"><Icon.Comment /> {t.comments.length}</span>}
+                            {t.deadline && (() => { const dl = deadlineLabel(t.deadline); return (
+                              <span className="member-chip" style={{ color: dl.urgent ? "var(--danger)" : dl.color, borderColor: dl.urgent ? "#EDD5D5" : "var(--border)", background: dl.urgent ? "#FDF2F2" : "var(--surface2)", fontWeight: dl.urgent ? 600 : 400 }}>
+                                <Icon.Clock /> {formatDate(t.deadline)} · {dl.text}
+                              </span>
+                            ); })()}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+              }
+            </div>
+          )}
+
+          {!loading && page === "completed" && (
+            <div className="fadein">
+              <div className="page-header">
+                <div>
+                  <div className="page-title"><em>Completed</em></div>
+                  <div className="subtitle">{completedTasks.length} completed task{completedTasks.length !== 1 ? "s" : ""}</div>
+                </div>
+                {isAdmin && completedTasks.length > 0 && (
+                  <button className="btn-danger" style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={clearDoneTasks}>
+                    <Icon.Trash /> Clear All
+                  </button>
+                )}
+              </div>
+
+              {isAdmin && (
+                <div className="flex gap-8 flex-wrap mb-16">
+                  {[{ id: "all", name: "All Members" }, ...members].map(m => (
+                    <button key={m.id} onClick={() => setFilterMember(m.id)} style={{
+                      padding: "7px 14px", borderRadius: 99, cursor: "pointer",
+                      fontWeight: 600, fontSize: 12,
+                      background: filterMember === m.id ? "var(--accent-dim)" : "var(--surface2)",
+                      color: filterMember === m.id ? "var(--accent)" : "var(--text3)",
+                      border: `1.5px solid ${filterMember === m.id ? "var(--accent)" : "var(--border)"}`,
+                      transition: "all .15s",
+                    }}>{m.id === "all" ? "All Members" : `${m.name} · ${m.id}`}</button>
+                  ))}
+                </div>
+              )}
+
+              {completedTasks.length === 0
+                ? <div className="empty"><div className="empty-icon">📭</div><div className="empty-label">No completed tasks yet.</div></div>
+                : completedTasks.map(t => <TaskCard key={t.id} task={t} members={members} onClick={() => setSelectedTask(t)} />)
               }
             </div>
           )}
@@ -1078,6 +1182,37 @@ export default function App() {
       {showRename && <RenameMembersModal users={members} onClose={() => setShowRename(false)} onRename={renameMembers} />}
       {showAddMember && <AddMemberModal existingUsers={users} onClose={() => setShowAddMember(false)} onAdd={addMember} />}
       {selectedTask && <TaskModal task={selectedTask} currentUser={currentUser} members={members} onClose={() => setSelectedTask(null)} onUpdateStatus={updateStatus} onAddComment={addComment} onUpdateTrack={updateTrack} onToggleAttention={toggleAttention} />}
+
+      {showAttentionPopup && isAdmin && (
+        <div className="modal-backdrop" onClick={() => setShowAttentionPopup(false)}>
+          <div className="modal fadein" style={{ maxWidth: 420, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>🔔</div>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 600, marginBottom: 8 }}>
+              Needs Your Attention
+            </div>
+            <div style={{ fontSize: 14, color: "var(--text2)", marginBottom: 24, lineHeight: 1.6 }}>
+              <strong style={{ color: "var(--danger)" }}>{attentionTasks.length} task{attentionTasks.length !== 1 ? "s" : ""}</strong> {attentionTasks.length === 1 ? "has" : "have"} been flagged by your team members and require your attention.
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              {attentionTasks.slice(0, 3).map(t => (
+                <div key={t.id} style={{ background: "#FFF7ED", border: "1px solid #FCD34D", borderRadius: 8, padding: "10px 14px", marginBottom: 8, textAlign: "left" }}>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 600, fontSize: 15 }}>{t.title}</div>
+                  <div style={{ fontSize: 11, color: "#B45309", marginTop: 3 }}>
+                    {members.find(m => m.id === t.assigned_to)?.name || t.assigned_to} · {t.status}
+                  </div>
+                </div>
+              ))}
+              {attentionTasks.length > 3 && <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 4 }}>+{attentionTasks.length - 3} more</div>}
+            </div>
+            <div className="flex gap-8" style={{ justifyContent: "center" }}>
+              <button className="btn-ghost" onClick={() => setShowAttentionPopup(false)}>Dismiss</button>
+              <button className="btn-primary" onClick={() => { setShowAttentionPopup(false); setPage("attention"); }}>
+                View All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
