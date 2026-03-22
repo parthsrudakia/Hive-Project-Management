@@ -155,11 +155,11 @@ const Icon = {
 };
 
 const STATUS_COLORS = {
-  incomplete:    { bg: "#FDF2F2", border: "#EDD5D5", text: "#C0392B", dot: "#C0392B" },
+  "not started": { bg: "#FDF2F2", border: "#EDD5D5", text: "#C0392B", dot: "#C0392B" },
   "in progress": { bg: "#F2F5FD", border: "#D5DEF0", text: "#1A4A7A", dot: "#1A4A7A" },
-  done:          { bg: "#F2FAF6", border: "#D5EDE3", text: "#27664A", dot: "#27664A" },
+  "completed":   { bg: "#F2FAF6", border: "#D5EDE3", text: "#27664A", dot: "#27664A" },
 };
-const STATUS_LABELS = ["incomplete", "in progress", "done"];
+const STATUS_LABELS = ["not started", "in progress", "completed"];
 
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Inter:wght@300;400;500;600&display=swap');
@@ -306,7 +306,7 @@ function PasswordInput({ value, onChange, placeholder = "Password" }) {
 }
 
 function StatusPill({ status }) {
-  const c = STATUS_COLORS[status] || STATUS_COLORS.incomplete;
+  const c = STATUS_COLORS[status] || STATUS_COLORS["not started"];
   return (
     <span className="status-pill" style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}>
       <span className="status-dot" style={{ background: c.dot }} />{status}
@@ -651,14 +651,14 @@ function TaskCard({ task, members, onClick }) {
 
 // ── Admin Overview ────────────────────────────────────────────────────────────
 function AdminOverview({ tasks, members }) {
-  const done = tasks.filter(t => t.status === "done").length;
+  const done = tasks.filter(t => t.status === "completed").length;
   const inprog = tasks.filter(t => t.status === "in progress").length;
   const urgent = tasks.filter(t => t.urgent).length;
   return (
     <div className="fadein">
       <div className="page-header"><div><div className="page-title"><em>Overview</em></div><div className="subtitle">{tasks.length} total tasks across all members</div></div></div>
       <div className="grid-4 mb-16">
-        {[{ label: "Total", num: tasks.length, color: "var(--text)" }, { label: "Done", num: done, color: "var(--success)" }, { label: "In Progress", num: inprog, color: "var(--info)" }, { label: "Urgent", num: urgent, color: "var(--danger)" }].map(s => (
+        {[{ label: "Total", num: tasks.length, color: "var(--text)" }, { label: "Completed", num: done, color: "var(--success)" }, { label: "In Progress", num: inprog, color: "var(--info)" }, { label: "Urgent", num: urgent, color: "var(--danger)" }].map(s => (
           <div className="overview-stat" key={s.label}>
             <div className="overview-stat-num" style={{ color: s.color }}>{s.num}</div>
             <div className="overview-stat-label">{s.label}</div>
@@ -668,7 +668,7 @@ function AdminOverview({ tasks, members }) {
       <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 14, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".08em" }}>Per Member</div>
       {members.map(m => {
         const mt = tasks.filter(t => t.assigned_to === m.id);
-        const md = mt.filter(t => t.status === "done").length;
+        const md = mt.filter(t => t.status === "completed").length;
         const pct = mt.length ? Math.round((md / mt.length) * 100) : 0;
         return (
           <div key={m.id} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "16px 20px", marginBottom: 10 }}>
@@ -677,7 +677,7 @@ function AdminOverview({ tasks, members }) {
                 <span className="member-chip"><Icon.User /> {m.id}</span>
                 <span style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 600, fontSize: 16 }}>{m.name}</span>
               </div>
-              <span style={{ fontSize: 12, color: "var(--text3)" }}>{md}/{mt.length} done · {pct}%</span>
+              <span style={{ fontSize: 12, color: "var(--text3)" }}>{md}/{mt.length} completed · {pct}%</span>
             </div>
             <div className="progress-bar-bg"><div className="progress-bar-fill" style={{ width: `${pct}%` }} /></div>
             <div className="flex gap-8 flex-wrap mt-8">
@@ -817,7 +817,7 @@ export default function App() {
   }
 
   async function createTask(form) {
-    await sb("tasks", { method: "POST", prefer: "return=representation", body: JSON.stringify({ title: form.title, description: form.description || null, deadline: form.deadline || null, urgent: form.urgent, assigned_to: form.assignedTo, status: "incomplete", created_by: currentUser.id }) });
+    await sb("tasks", { method: "POST", prefer: "return=representation", body: JSON.stringify({ title: form.title, description: form.description || null, deadline: form.deadline || null, urgent: form.urgent, assigned_to: form.assignedTo, status: "not started", created_by: currentUser.id }) });
     await fetchTasks(); setShowCreate(false); showToast("Task created!");
     // Notify the assigned member
     const assignedMember = users.find(u => u.id === form.assignedTo);
@@ -844,7 +844,7 @@ export default function App() {
   }
 
   async function clearDoneTasks() {
-    await sb("tasks?status=eq.done", { method: "DELETE", prefer: "return=minimal" });
+    await sb("tasks?status=eq.completed", { method: "DELETE", prefer: "return=minimal" });
     await fetchTasks(); showToast("Completed tasks cleared.");
   }
 
@@ -901,20 +901,20 @@ export default function App() {
     return new Date(b.created_at) - new Date(a.created_at);
   };
 
-  const activeTasks = [...allVisible.filter(t => t.status !== "done")].sort(sortFn);
-  const completedTasks = [...allVisible.filter(t => t.status === "done")].sort(sortFn);
+  const activeTasks = [...allVisible.filter(t => t.status !== "completed")].sort(sortFn);
+  const completedTasks = [...allVisible.filter(t => t.status === "completed")].sort(sortFn);
   const attentionTasks = tasks.filter(t => t.needs_attention);
 
   const navItems = isAdmin
     ? [
-        { id: "overview", label: "Overview", icon: <Icon.Overview /> },
-        { id: "tasks", label: "All Tasks", icon: <Icon.Task /> },
-        { id: "completed", label: "Completed", icon: <Icon.Track /> },
-        { id: "attention", label: "Needs Attention", icon: <Icon.Bell />, badge: attentionTasks.length },
+        { id: "overview",   label: "Overview",        icon: <Icon.Overview /> },
+        { id: "tasks",      label: "All Tasks",        icon: <Icon.Task /> },
+        { id: "completed",  label: "Completed",        icon: <Icon.Track /> },
+        { id: "attention",  label: "Needs Attention",  icon: <Icon.Bell />, badge: attentionTasks.length },
       ]
     : [
-        { id: "tasks", label: "My Tasks", icon: <Icon.Task /> },
-        { id: "completed", label: "Completed", icon: <Icon.Track /> },
+        { id: "tasks",      label: "My Tasks",         icon: <Icon.Task /> },
+        { id: "completed",  label: "Completed",        icon: <Icon.Track /> },
       ];
 
   // ── Biometric Prompt ──────────────────────────────────────────────────────
@@ -1014,12 +1014,19 @@ export default function App() {
 
           <div className="sidebar-section">Navigation</div>
           {navItems.map(n => (
-            <div key={n.id} className={`nav-pill ${page === n.id ? "active" : ""}`} onClick={() => setPage(n.id)}>
+            <div key={n.id} className={`nav-pill ${page === n.id ? "active" : ""}`} onClick={() => setPage(n.id)}
+              style={{ position: "relative" }}>
               {n.icon}
               <span style={{ flex: 1 }}>{n.label}</span>
               {n.badge > 0 && (
-                <span style={{ background: "var(--danger)", color: "#fff", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 6px", minWidth: 18, textAlign: "center" }}>
-                  {n.badge}
+                <span style={{
+                  background: "#E8392A", color: "#fff",
+                  borderRadius: "50%", fontSize: 10, fontWeight: 700,
+                  minWidth: 18, height: 18,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: "0 4px", lineHeight: 1, flexShrink: 0,
+                }}>
+                  {n.badge > 99 ? "99+" : n.badge}
                 </span>
               )}
             </div>
