@@ -993,10 +993,6 @@ export default function App() {
     );
   }
 
-  const navItems = isAdmin
-    ? [{ id: "overview", label: "Overview", icon: <Icon.Overview /> }, { id: "tasks", label: "All Tasks", icon: <Icon.Task /> }, { id: "attention", label: "Needs Attention", icon: <Icon.Bell /> }]
-    : [{ id: "tasks", label: "My Tasks", icon: <Icon.Task /> }];
-
   return (
     <>
       <style>{STYLES}</style>
