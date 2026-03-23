@@ -271,10 +271,6 @@ function formatDate(d) {
   if (!d) return "";
   return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
-function isOverdue(d) {
-  if (!d) return false;
-  return new Date(d) < new Date() && new Date(d).toDateString() !== new Date().toDateString();
-}
 function daysUntil(d) {
   if (!d) return null;
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -292,7 +288,7 @@ function deadlineLabel(d) {
 }
 
 function Toast({ msg, type, onDone }) {
-  useEffect(() => { const t = setTimeout(onDone, 3000); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(onDone, 3000); return () => clearTimeout(t); }, [onDone]);
   return <div className={`toast${type === "error" ? " error" : ""}`}>{msg}</div>;
 }
 
@@ -874,7 +870,7 @@ export default function App() {
 
   async function resumeSession(user) {
     setCurrentUser(user); setLoginId(""); setLoginPw("");
-    const [, fetchedTasks] = await Promise.all([fetchUsers(), fetchTasks()]);
+    await Promise.all([fetchUsers(), fetchTasks()]);
     setPage(user.role === "admin" ? "overview" : "tasks");
     registerPush(user.id);
     // Show attention popup for admin if there are flagged tasks
@@ -933,8 +929,6 @@ export default function App() {
     await sb("tasks", { method: "POST", prefer: "return=representation", body: JSON.stringify({ title: form.title, description: form.description || null, deadline: form.deadline || null, urgent: form.urgent, assigned_to: form.assignedTo, status: "not started" }) });
     await fetchTasks(); setShowCreate(false); showToast("Task created!");
     // Notify the assigned member
-    const assignedMember = users.find(u => u.id === form.assignedTo);
-    const memberName = assignedMember?.name || form.assignedTo;
     sendPushNotification(
       form.assignedTo,
       "New Task Assigned 📋",
