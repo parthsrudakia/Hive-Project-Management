@@ -726,6 +726,59 @@ function AdminOverview({ tasks, members, onSelectMember }) {
   );
 }
 
+// ── Change Password Modal (for members) ──────────────────────────────────────
+function ChangePasswordModal({ currentUser, onClose, onSave }) {
+  const [pw, setPw] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function submit() {
+    if (!pw.trim()) { setErr("Please enter a new password."); return; }
+    if (pw.trim().length < 6) { setErr("Password must be at least 6 characters."); return; }
+    if (pw.trim() !== confirm.trim()) { setErr("Passwords do not match."); return; }
+    setSaving(true);
+    try {
+      await onSave(currentUser.id, pw.trim());
+      setDone(true); setPw(""); setConfirm(""); setErr("");
+    } catch (e) { setErr(e.message); }
+    setSaving(false);
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal fadein">
+        <div className="modal-title"><Icon.Key /> Change Password</div>
+
+        <div style={{ background: "var(--accent-dim)", border: "1px solid var(--border2)", borderRadius: 8, padding: "10px 14px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10 }}>
+          <Icon.User />
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{currentUser.name}</span>
+          <span className="member-chip" style={{ marginLeft: "auto" }}>{currentUser.id}</span>
+        </div>
+
+        <div className="field">
+          <label>New Password</label>
+          <PasswordInput value={pw} onChange={e => { setPw(e.target.value); setErr(""); setDone(false); }} placeholder="Enter new password" />
+        </div>
+
+        <div className="field">
+          <label>Confirm New Password</label>
+          <PasswordInput value={confirm} onChange={e => { setConfirm(e.target.value); setErr(""); setDone(false); }} placeholder="Re-enter new password" />
+        </div>
+
+        {err && <div style={{ color: "var(--danger)", fontSize: 12, marginBottom: 14 }}>{err}</div>}
+        {done && <div style={{ color: "var(--success)", fontSize: 12, marginBottom: 14 }}>✓ Password updated successfully!</div>}
+
+        <div className="flex gap-8" style={{ justifyContent: "flex-end" }}>
+          <button className="btn-ghost" onClick={onClose}>Close</button>
+          <button className="btn-primary" onClick={submit} disabled={saving}>{saving ? "Saving…" : "Update Password"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Delete Member Modal ───────────────────────────────────────────────────────
 function DeleteMemberModal({ users, tasks, onClose, onDelete }) {
   const [sel, setSel] = useState(users[0]?.id || "");
@@ -815,6 +868,7 @@ export default function App() {
   const [showRename, setShowRename] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [showDeleteMember, setShowDeleteMember] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [filterMember, setFilterMember] = useState("all");
   const [toast, setToast] = useState(null);
@@ -1166,6 +1220,7 @@ export default function App() {
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 600, fontSize: 15 }}>{currentUser.name}</div>
               <div style={{ fontSize: 11, color: "var(--text3)" }}>{currentUser.id}</div>
             </div>
+            <div className="nav-pill" onClick={() => setShowChangePassword(true)}><Icon.Key /> <span>Change Password</span></div>
             <div className="nav-pill" onClick={refreshAll}><Icon.Refresh /> <span>Refresh</span></div>
             <div className="nav-pill" onClick={logout}><Icon.Logout /> <span>Sign Out</span></div>
           </div>
@@ -1309,6 +1364,7 @@ export default function App() {
       {showRename && <RenameMembersModal users={members} onClose={() => setShowRename(false)} onRename={renameMembers} />}
       {showAddMember && <AddMemberModal existingUsers={users} onClose={() => setShowAddMember(false)} onAdd={addMember} />}
       {showDeleteMember && <DeleteMemberModal users={members} tasks={tasks} onClose={() => setShowDeleteMember(false)} onDelete={deleteMember} />}
+      {showChangePassword && <ChangePasswordModal currentUser={currentUser} onClose={() => setShowChangePassword(false)} onSave={resetPassword} />}
       {selectedTask && <TaskModal task={selectedTask} currentUser={currentUser} members={members} onClose={() => setSelectedTask(null)} onUpdateStatus={updateStatus} onAddComment={addComment} onUpdateTrack={updateTrack} onToggleAttention={toggleAttention} onDeleteTask={deleteTask} />}
 
       {showAttentionPopup && isAdmin && (
