@@ -261,6 +261,8 @@ const STYLES = `
     .sidebar-logo{justify-content:center}
     .page-title{font-size:22px}
     .grid-2{grid-template-columns:1fr}
+    .sidebar-bottom{padding-top:12px}
+    .sidebar-bottom > div:first-child{display:none}
   }
   .toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:#fff;padding:12px 20px;border-radius:var(--radius);font-size:13px;z-index:200;animation:fadeIn .2s ease;box-shadow:0 8px 24px rgba(26,25,22,.2)}
   .toast.error{background:var(--danger)}
@@ -1124,7 +1126,7 @@ export default function App() {
     : [
         { id: "tasks",      label: "My Tasks",         icon: <Icon.Task /> },
         { id: "completed",  label: "Completed",        icon: <Icon.Track /> },
-        { id: "settings",   label: "Settings",         icon: <Icon.Key /> },
+        { id: "settings",   label: "My Account",       icon: <Icon.User /> },
       ];
 
   // ── Biometric Prompt ──────────────────────────────────────────────────────
@@ -1400,20 +1402,20 @@ export default function App() {
             <div className="fadein">
               <div className="page-header">
                 <div>
-                  <div className="page-title"><em>Settings</em></div>
-                  <div className="subtitle">Manage your account</div>
+                  <div className="page-title"><em>My Account</em></div>
+                  <div className="subtitle">Manage your profile and security</div>
                 </div>
               </div>
 
               {/* Profile card */}
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "20px 24px", marginBottom: 16 }}>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 11, fontWeight: 600, letterSpacing: ".08em", color: "var(--text3)", textTransform: "uppercase", marginBottom: 12 }}>Account</div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".08em", color: "var(--text3)", textTransform: "uppercase", marginBottom: 12 }}>Profile</div>
                 <div className="flex items-center gap-12">
-                  <div style={{ width: 44, height: 44, borderRadius: "50%", background: "var(--accent-dim)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ width: 48, height: 48, borderRadius: "50%", background: "var(--accent-dim)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <Icon.User />
                   </div>
                   <div>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 600, fontSize: 18 }}>{currentUser.name}</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 600, fontSize: 20 }}>{currentUser.name}</div>
                     <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>{currentUser.id}</div>
                   </div>
                 </div>
@@ -1421,9 +1423,14 @@ export default function App() {
 
               {/* Change password card */}
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "20px 24px", marginBottom: 16 }}>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 11, fontWeight: 600, letterSpacing: ".08em", color: "var(--text3)", textTransform: "uppercase", marginBottom: 16 }}>Security</div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".08em", color: "var(--text3)", textTransform: "uppercase", marginBottom: 16 }}>Change Password</div>
                 <ChangePasswordInline currentUser={currentUser} onSave={resetPassword} showToast={showToast} />
               </div>
+
+              {/* Sign out */}
+              <button className="btn-danger w-full" style={{ padding: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={logout}>
+                <Icon.Logout /> Sign Out
+              </button>
             </div>
           )}
         </main>
