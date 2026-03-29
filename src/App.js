@@ -316,10 +316,12 @@ function StatusPill({ status }) {
 }
 
 // ── Task Modal ────────────────────────────────────────────────────────────────
-function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddComment, onUpdateTrack, onToggleAttention, onDeleteTask }) {
+function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddComment, onUpdateTrack, onToggleAttention, onDeleteTask, onUpdateDeadline }) {
   const [comment, setComment] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editingDeadline, setEditingDeadline] = useState(false);
+  const [deadlineVal, setDeadlineVal] = useState(task.deadline || "");
   const isAdmin = currentUser.role === "admin";
   const memberName = members.find(m => m.id === task.assigned_to)?.name || task.assigned_to;
   const dl = task.deadline ? deadlineLabel(task.deadline) : null;
@@ -333,6 +335,12 @@ function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddC
   }
   async function handleDelete() {
     setSaving(true); await onDeleteTask(task.id); setSaving(false);
+  }
+  async function saveDeadline() {
+    setSaving(true);
+    await onUpdateDeadline(task.id, deadlineVal || null);
+    setEditingDeadline(false);
+    setSaving(false);
   }
 
   return (
@@ -368,10 +376,40 @@ function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddC
         <div className="flex items-center gap-8 flex-wrap mb-16">
           <StatusPill status={task.status} />
           <span className="member-chip"><Icon.User /> {memberName}</span>
-          {dl && (
-            <span className="member-chip" style={{ color: dl.urgent ? "var(--danger)" : dl.color, borderColor: dl.urgent ? "#EDD5D5" : "var(--border)", background: dl.urgent ? "#FDF2F2" : "var(--surface2)", fontWeight: dl.urgent ? 600 : 400 }}>
-              <Icon.Clock /> {formatDate(task.deadline)} · {dl.text}
-            </span>
+
+          {/* Deadline — editable by admin, read-only for members */}
+          {isAdmin ? (
+            editingDeadline ? (
+              <div className="flex items-center gap-8">
+                <input type="date" value={deadlineVal} onChange={e => setDeadlineVal(e.target.value)}
+                  style={{ width: "auto", padding: "4px 10px", fontSize: 12 }} />
+                <button className="btn-primary" style={{ padding: "4px 12px", fontSize: 12 }} onClick={saveDeadline} disabled={saving}>
+                  {saving ? "…" : "Save"}
+                </button>
+                <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => { setEditingDeadline(false); setDeadlineVal(task.deadline || ""); }}>
+                  Cancel
+                </button>
+                {deadlineVal && (
+                  <button className="btn-danger" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => { setDeadlineVal(""); }} title="Clear deadline">
+                    ✕
+                  </button>
+                )}
+              </div>
+            ) : (
+              <span className="member-chip" onClick={() => setEditingDeadline(true)}
+                style={{ cursor: "pointer", color: dl?.urgent ? "var(--danger)" : "var(--text2)", borderColor: dl?.urgent ? "#EDD5D5" : "var(--border)", background: dl?.urgent ? "#FDF2F2" : "var(--surface2)", fontWeight: dl?.urgent ? 600 : 400 }}
+                title="Click to edit deadline">
+                <Icon.Clock />
+                {dl ? `${formatDate(task.deadline)} · ${dl.text}` : <span style={{ color: "var(--text3)" }}>Set deadline</span>}
+                <span style={{ fontSize: 10, color: "var(--text3)", marginLeft: 2 }}>✎</span>
+              </span>
+            )
+          ) : (
+            dl && (
+              <span className="member-chip" style={{ color: dl.urgent ? "var(--danger)" : dl.color, borderColor: dl.urgent ? "#EDD5D5" : "var(--border)", background: dl.urgent ? "#FDF2F2" : "var(--surface2)", fontWeight: dl.urgent ? 600 : 400 }}>
+                <Icon.Clock /> {formatDate(task.deadline)} · {dl.text}
+              </span>
+            )
           )}
         </div>
 
@@ -1050,6 +1088,14 @@ export default function App() {
     showToast("Task deleted.");
   }
 
+  async function updateDeadline(taskId, deadline) {
+    await sb(`tasks?id=eq.${taskId}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify({ deadline: deadline || null }) });
+    const updated = await fetchTasks();
+    const fresh = (updated || []).find(t => t.id === taskId);
+    if (fresh && selectedTask?.id === taskId) setSelectedTask(fresh);
+    showToast(deadline ? "Deadline updated!" : "Deadline removed.");
+  }
+
   async function updateTrack(taskId, track_status) {
     await sb(`tasks?id=eq.${taskId}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify({ track_status }) });
     const updated = await fetchTasks();
@@ -1442,7 +1488,7 @@ export default function App() {
       {showAddMember && <AddMemberModal existingUsers={users} onClose={() => setShowAddMember(false)} onAdd={addMember} />}
       {showDeleteMember && <DeleteMemberModal users={members} tasks={tasks} onClose={() => setShowDeleteMember(false)} onDelete={deleteMember} />}
       {showChangePassword && <ChangePasswordModal currentUser={currentUser} onClose={() => setShowChangePassword(false)} onSave={resetPassword} />}
-      {selectedTask && <TaskModal task={selectedTask} currentUser={currentUser} members={members} onClose={() => setSelectedTask(null)} onUpdateStatus={updateStatus} onAddComment={addComment} onUpdateTrack={updateTrack} onToggleAttention={toggleAttention} onDeleteTask={deleteTask} />}
+      {selectedTask && <TaskModal task={selectedTask} currentUser={currentUser} members={members} onClose={() => setSelectedTask(null)} onUpdateStatus={updateStatus} onAddComment={addComment} onUpdateTrack={updateTrack} onToggleAttention={toggleAttention} onDeleteTask={deleteTask} onUpdateDeadline={updateDeadline} />}
 
       {showAttentionPopup && isAdmin && (
         <div className="modal-backdrop" onClick={() => setShowAttentionPopup(false)}>
