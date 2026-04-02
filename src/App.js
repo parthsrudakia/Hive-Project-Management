@@ -1141,6 +1141,9 @@ export default function App() {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [filterMember, setFilterMember] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterUrgency, setFilterUrgency] = useState("all");
+  const [sortBy, setSortBy] = useState("default");
   const [toast, setToast] = useState(null);
   const [showAttentionPopup, setShowAttentionPopup] = useState(false);
   const [showEmailPrompt, setShowEmailPrompt] = useState(false);
@@ -1379,12 +1382,32 @@ export default function App() {
     : tasks.filter(t => t.assigned_to === currentUser?.id);
 
   const sortFn = (a, b) => {
-    if (a.urgent && !b.urgent) return -1;
-    if (!a.urgent && b.urgent) return 1;
+    if (sortBy === "deadline") {
+      if (!a.deadline && !b.deadline) return 0;
+      if (!a.deadline) return 1;
+      if (!b.deadline) return -1;
+      return new Date(a.deadline) - new Date(b.deadline);
+    }
+    if (sortBy === "status") {
+      const order = { "not started": 0, "in progress": 1, "completed": 2 };
+      if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+    }
+    if (sortBy === "urgent") {
+      if (a.urgent && !b.urgent) return -1;
+      if (!a.urgent && b.urgent) return 1;
+    }
+    if (sortBy === "default" || sortBy === "urgent") {
+      if (a.urgent && !b.urgent) return -1;
+      if (!a.urgent && b.urgent) return 1;
+    }
     return new Date(b.created_at) - new Date(a.created_at);
   };
 
-  const activeTasks = [...allVisible.filter(t => t.status !== "completed")].sort(sortFn);
+  let filteredActive = allVisible.filter(t => t.status !== "completed");
+  if (filterStatus !== "all") filteredActive = filteredActive.filter(t => t.status === filterStatus);
+  if (filterUrgency === "urgent") filteredActive = filteredActive.filter(t => t.urgent);
+  if (filterUrgency === "not_urgent") filteredActive = filteredActive.filter(t => !t.urgent);
+  const activeTasks = [...filteredActive].sort(sortFn);
   const completedTasks = [...allVisible.filter(t => t.status === "completed")].sort(sortFn);
   const attentionTasks = tasks.filter(t => t.needs_attention);
 
@@ -1448,7 +1471,7 @@ export default function App() {
 
           <div className="sidebar-section">Navigation</div>
           {navItems.map(n => (
-            <div key={n.id} className={`nav-pill ${page === n.id ? "active" : ""}`} onClick={() => { setPage(n.id); if (n.id !== "overview") setOverviewFilter(null); }}
+            <div key={n.id} className={`nav-pill ${page === n.id ? "active" : ""}`} onClick={() => { setPage(n.id); if (n.id !== "overview") setOverviewFilter(null); if (n.id !== "tasks") { setFilterStatus("all"); setFilterUrgency("all"); setSortBy("default"); } }}
               style={{ position: "relative" }}>
               {n.icon}
               <span style={{ flex: 1 }}>{n.label}</span>
@@ -1549,7 +1572,7 @@ export default function App() {
               </div>
 
               {isAdmin && (
-                <div className="flex gap-8 flex-wrap mb-16">
+                <div className="flex gap-8 flex-wrap mb-12">
                   {[{ id: "all", name: "All Members" }, ...members].map(m => (
                     <button key={m.id} onClick={() => setFilterMember(m.id)} style={{
                       padding: "7px 14px", borderRadius: 99, cursor: "pointer",
@@ -1562,6 +1585,50 @@ export default function App() {
                   ))}
                 </div>
               )}
+
+              <div className="flex gap-8 flex-wrap items-center mb-16">
+                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{
+                  padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                  background: filterStatus !== "all" ? "var(--accent-dim)" : "var(--surface2)",
+                  color: filterStatus !== "all" ? "var(--accent)" : "var(--text3)",
+                  border: `1.5px solid ${filterStatus !== "all" ? "var(--accent)" : "var(--border)"}`,
+                  cursor: "pointer", outline: "none", transition: "all .15s",
+                }}>
+                  <option value="all">All Statuses</option>
+                  <option value="not started">Not Started</option>
+                  <option value="in progress">In Progress</option>
+                </select>
+                <select value={filterUrgency} onChange={e => setFilterUrgency(e.target.value)} style={{
+                  padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                  background: filterUrgency !== "all" ? "var(--accent-dim)" : "var(--surface2)",
+                  color: filterUrgency !== "all" ? "var(--accent)" : "var(--text3)",
+                  border: `1.5px solid ${filterUrgency !== "all" ? "var(--accent)" : "var(--border)"}`,
+                  cursor: "pointer", outline: "none", transition: "all .15s",
+                }}>
+                  <option value="all">All Priority</option>
+                  <option value="urgent">Urgent Only</option>
+                  <option value="not_urgent">Not Urgent</option>
+                </select>
+                <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{
+                  padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                  background: sortBy !== "default" ? "var(--accent-dim)" : "var(--surface2)",
+                  color: sortBy !== "default" ? "var(--accent)" : "var(--text3)",
+                  border: `1.5px solid ${sortBy !== "default" ? "var(--accent)" : "var(--border)"}`,
+                  cursor: "pointer", outline: "none", transition: "all .15s",
+                }}>
+                  <option value="default">Sort: Default</option>
+                  <option value="deadline">Sort: Deadline</option>
+                  <option value="status">Sort: Status</option>
+                  <option value="urgent">Sort: Urgent First</option>
+                </select>
+                {(filterStatus !== "all" || filterUrgency !== "all" || sortBy !== "default") && (
+                  <button onClick={() => { setFilterStatus("all"); setFilterUrgency("all"); setSortBy("default"); }} style={{
+                    padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                    background: "none", color: "var(--text3)", border: "1.5px solid var(--border)",
+                    cursor: "pointer", transition: "all .15s",
+                  }}>Clear</button>
+                )}
+              </div>
 
               {activeTasks.length === 0
                 ? <div className="empty"><div className="empty-icon">🎉</div><div className="empty-label">All caught up! No active projects.</div></div>
