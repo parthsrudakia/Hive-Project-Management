@@ -1163,7 +1163,7 @@ export default function App() {
     localStorage.setItem("hiveboard_theme", next);
   };
   // Apply theme on mount
-  React.useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState([]);
   const [tasks, setTasks] = useState([]);
