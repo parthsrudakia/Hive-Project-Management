@@ -3,117 +3,110 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const FROM_EMAIL = Deno.env.get("FROM_EMAIL") || "Hiveboard <notifications@hiveny.com>";
 
-function taskCreatedHtml(task: { title: string; description?: string; deadline?: string; assigned_to: string }) {
+function wrap(badge: string, badgeColor: string, title: string, body: string) {
   return `
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#FAFAF8;font-family:'Helvetica Neue',Arial,sans-serif;color:#1A1916">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#FAFAF8;padding:40px 20px">
+<body style="margin:0;padding:0;background:#f4f2ee;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f2ee;padding:48px 20px">
     <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid #E8E6E0;border-radius:10px;overflow:hidden">
-        <tr><td style="background:#1A1916;padding:24px 32px">
-          <span style="font-size:20px;font-weight:600;color:#fff;letter-spacing:.02em">&#x2B22; Hiveboard</span>
+      <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06)">
+
+        <!-- Header -->
+        <tr><td style="padding:28px 36px 0 36px">
+          <table cellpadding="0" cellspacing="0"><tr>
+            <td style="width:32px;height:32px;background:#1a1916;border-radius:8px;text-align:center;vertical-align:middle;font-size:16px;color:#fff">&#x2B22;</td>
+            <td style="padding-left:10px;font-size:15px;font-weight:600;color:#1a1916;letter-spacing:-.02em">Hiveboard</td>
+          </tr></table>
         </td></tr>
-        <tr><td style="padding:32px">
-          <div style="font-size:11px;font-weight:600;letter-spacing:.1em;color:#A8A49C;text-transform:uppercase;margin-bottom:8px">New Project Assigned</div>
-          <div style="font-size:26px;font-weight:600;color:#1A1916;line-height:1.3;margin-bottom:20px;font-family:Georgia,'Times New Roman',serif">${escapeHtml(task.title)}</div>
-          ${task.description ? `<div style="font-size:14px;color:#6B6860;line-height:1.7;margin-bottom:20px;padding:16px;background:#F5F4F0;border-radius:8px">${escapeHtml(task.description)}</div>` : ""}
-          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">
-            <tr>
-              <td style="padding:12px 16px;background:#F5F4F0;border-radius:8px 8px 0 0;border-bottom:1px solid #E8E6E0">
-                <span style="font-size:11px;font-weight:600;color:#A8A49C;text-transform:uppercase;letter-spacing:.08em">Status</span>
-                <div style="margin-top:4px;font-size:14px;font-weight:500">
-                  <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#C0392B;margin-right:6px;vertical-align:middle"></span>Not Started
-                </div>
-              </td>
-              <td style="padding:12px 16px;background:#F5F4F0;border-radius:8px 8px 0 0;border-bottom:1px solid #E8E6E0">
-                <span style="font-size:11px;font-weight:600;color:#A8A49C;text-transform:uppercase;letter-spacing:.08em">Deadline</span>
-                <div style="margin-top:4px;font-size:14px;font-weight:500">${task.deadline ? formatDateEmail(task.deadline) : "No deadline"}</div>
-              </td>
-            </tr>
-          </table>
-          <div style="text-align:center;padding-top:8px">
-            <span style="font-size:13px;color:#6B6860">Log in to Hiveboard to view details and get started.</span>
-          </div>
+
+        <!-- Badge + Title -->
+        <tr><td style="padding:28px 36px 0 36px">
+          <div style="display:inline-block;padding:4px 12px;border-radius:99px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:${badgeColor};margin-bottom:14px">${badge}</div>
+          <div style="font-size:22px;font-weight:700;color:#1a1916;line-height:1.35;margin-top:12px;letter-spacing:-.02em">${escapeHtml(title)}</div>
         </td></tr>
-        <tr><td style="padding:16px 32px;background:#F5F4F0;border-top:1px solid #E8E6E0">
-          <span style="font-size:11px;color:#A8A49C">Sent from Hiveboard &mdash; Your team project tracker</span>
+
+        <!-- Body -->
+        <tr><td style="padding:20px 36px 32px 36px">
+          ${body}
         </td></tr>
+
+        <!-- Footer -->
+        <tr><td style="padding:20px 36px;border-top:1px solid #eae8e4">
+          <table width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td style="font-size:12px;color:#9c978e">Hiveboard</td>
+            <td align="right" style="font-size:11px;color:#c4c0b8">Automated notification</td>
+          </tr></table>
+        </td></tr>
+
       </table>
+
+      <div style="text-align:center;padding-top:24px;font-size:11px;color:#b0ab9f">
+        You received this because your admin updated a project assigned to you.
+      </div>
     </td></tr>
   </table>
 </body></html>`;
+}
+
+function taskCreatedHtml(task: { title: string; description?: string; deadline?: string; assigned_to: string }) {
+  let body = "";
+
+  if (task.description) {
+    body += `<div style="font-size:14px;color:#4a4740;line-height:1.7;margin-bottom:20px">${escapeHtml(task.description)}</div>`;
+  }
+
+  body += `
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-radius:10px;overflow:hidden;margin-bottom:8px">
+      <tr>
+        <td style="padding:14px 18px;background:#fafaf8;border:1px solid #eae8e4;border-right:none;border-radius:10px 0 0 10px;width:50%">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9c978e;margin-bottom:6px">Status</div>
+          <div style="font-size:14px;color:#1a1916;font-weight:600">
+            <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#e8453c;margin-right:6px;vertical-align:middle"></span>Not Started
+          </div>
+        </td>
+        <td style="padding:14px 18px;background:#fafaf8;border:1px solid #eae8e4;border-left:none;border-radius:0 10px 10px 0;width:50%">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9c978e;margin-bottom:6px">Deadline</div>
+          <div style="font-size:14px;color:#1a1916;font-weight:600">${task.deadline ? formatDateEmail(task.deadline) : "None set"}</div>
+        </td>
+      </tr>
+    </table>`;
+
+  return wrap("New Project", "#e8453c", task.title, body);
 }
 
 function taskUpdatedHtml(task: { title: string }, changes: { field: string; from?: string; to?: string }[]) {
-  const changeRows = changes.map(c => `
-    <tr>
-      <td style="padding:10px 16px;border-bottom:1px solid #E8E6E0;font-size:13px;font-weight:600;color:#6B6860;text-transform:capitalize;width:120px">${escapeHtml(c.field)}</td>
-      <td style="padding:10px 16px;border-bottom:1px solid #E8E6E0;font-size:13px">
-        ${c.from ? `<span style="color:#C0392B;text-decoration:line-through">${escapeHtml(c.from)}</span> &rarr; ` : ""}<span style="color:#27664A;font-weight:500">${escapeHtml(c.to || "—")}</span>
-      </td>
-    </tr>
-  `).join("");
+  let rows = "";
+  changes.forEach((c, i) => {
+    const isLast = i === changes.length - 1;
+    const border = isLast ? "" : "border-bottom:1px solid #eae8e4;";
+    rows += `
+      <tr>
+        <td style="padding:12px 16px;${border}vertical-align:top;width:110px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#9c978e">${escapeHtml(c.field)}</div>
+        </td>
+        <td style="padding:12px 16px;${border}font-size:14px;color:#1a1916">
+          ${c.from ? `<span style="color:#b0ab9f;text-decoration:line-through">${escapeHtml(c.from)}</span><span style="color:#b0ab9f;padding:0 6px">&rarr;</span>` : ""}<span style="font-weight:600;color:#1a1916">${escapeHtml(c.to || "\u2014")}</span>
+        </td>
+      </tr>`;
+  });
 
-  return `
-<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#FAFAF8;font-family:'Helvetica Neue',Arial,sans-serif;color:#1A1916">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#FAFAF8;padding:40px 20px">
-    <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid #E8E6E0;border-radius:10px;overflow:hidden">
-        <tr><td style="background:#1A1916;padding:24px 32px">
-          <span style="font-size:20px;font-weight:600;color:#fff;letter-spacing:.02em">&#x2B22; Hiveboard</span>
-        </td></tr>
-        <tr><td style="padding:32px">
-          <div style="font-size:11px;font-weight:600;letter-spacing:.1em;color:#A8A49C;text-transform:uppercase;margin-bottom:8px">Project Updated</div>
-          <div style="font-size:26px;font-weight:600;color:#1A1916;line-height:1.3;margin-bottom:24px;font-family:Georgia,'Times New Roman',serif">${escapeHtml(task.title)}</div>
-          <table width="100%" cellpadding="0" cellspacing="0" style="background:#F5F4F0;border-radius:8px;border:1px solid #E8E6E0;margin-bottom:24px">
-            <tr><td style="padding:12px 16px;border-bottom:1px solid #E8E6E0;font-size:11px;font-weight:700;color:#A8A49C;text-transform:uppercase;letter-spacing:.08em" colspan="2">What Changed</td></tr>
-            ${changeRows}
-          </table>
-          <div style="text-align:center;padding-top:8px">
-            <span style="font-size:13px;color:#6B6860">Log in to Hiveboard to view the full project.</span>
-          </div>
-        </td></tr>
-        <tr><td style="padding:16px 32px;background:#F5F4F0;border-top:1px solid #E8E6E0">
-          <span style="font-size:11px;color:#A8A49C">Sent from Hiveboard &mdash; Your team project tracker</span>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>`;
+  const body = `
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafaf8;border:1px solid #eae8e4;border-radius:10px;overflow:hidden">
+      ${rows}
+    </table>`;
+
+  return wrap(changes.length === 1 ? "Updated" : `${changes.length} Changes`, "#d97706", task.title, body);
 }
 
 function commentAddedHtml(task: { title: string }, comment: { author: string; text: string }) {
-  return `
-<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#FAFAF8;font-family:'Helvetica Neue',Arial,sans-serif;color:#1A1916">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#FAFAF8;padding:40px 20px">
-    <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid #E8E6E0;border-radius:10px;overflow:hidden">
-        <tr><td style="background:#1A1916;padding:24px 32px">
-          <span style="font-size:20px;font-weight:600;color:#fff;letter-spacing:.02em">&#x2B22; Hiveboard</span>
-        </td></tr>
-        <tr><td style="padding:32px">
-          <div style="font-size:11px;font-weight:600;letter-spacing:.1em;color:#A8A49C;text-transform:uppercase;margin-bottom:8px">New Comment</div>
-          <div style="font-size:26px;font-weight:600;color:#1A1916;line-height:1.3;margin-bottom:24px;font-family:Georgia,'Times New Roman',serif">${escapeHtml(task.title)}</div>
-          <div style="background:#F5F4F0;border:1px solid #E8E6E0;border-radius:8px;padding:16px;margin-bottom:24px">
-            <div style="font-size:12px;font-weight:600;color:#6B6860;margin-bottom:8px">${escapeHtml(comment.author)} wrote:</div>
-            <div style="font-size:14px;color:#1A1916;line-height:1.7">${escapeHtml(comment.text)}</div>
-          </div>
-          <div style="text-align:center;padding-top:8px">
-            <span style="font-size:13px;color:#6B6860">Log in to Hiveboard to reply.</span>
-          </div>
-        </td></tr>
-        <tr><td style="padding:16px 32px;background:#F5F4F0;border-top:1px solid #E8E6E0">
-          <span style="font-size:11px;color:#A8A49C">Sent from Hiveboard &mdash; Your team project tracker</span>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>`;
+  const body = `
+    <div style="background:#fafaf8;border:1px solid #eae8e4;border-radius:10px;padding:18px 20px">
+      <div style="font-size:12px;font-weight:700;color:#9c978e;margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em">${escapeHtml(comment.author)}</div>
+      <div style="font-size:15px;color:#1a1916;line-height:1.7">${escapeHtml(comment.text)}</div>
+    </div>`;
+
+  return wrap("New Comment", "#2563eb", task.title, body);
 }
 
 function escapeHtml(str: string): string {
