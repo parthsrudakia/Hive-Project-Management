@@ -125,7 +125,17 @@ function formatDateEmail(d: string): string {
   return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 }
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
   try {
     const { user_id, type, task, changes, comment } = await req.json();
 
@@ -138,7 +148,7 @@ Deno.serve(async (req) => {
     const user = users?.[0];
     if (!user?.email) {
       return new Response(JSON.stringify({ ok: false, reason: "no_email" }), {
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -160,7 +170,7 @@ Deno.serve(async (req) => {
         break;
       default:
         return new Response(JSON.stringify({ ok: false, reason: "unknown_type" }), {
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
     }
 
@@ -183,18 +193,18 @@ Deno.serve(async (req) => {
       const err = await sendRes.text();
       console.error("Resend error:", err);
       return new Response(JSON.stringify({ ok: false, reason: "send_failed", detail: err }), {
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     return new Response(JSON.stringify({ ok: true }), {
-      headers: { "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("Email notification error:", e);
     return new Response(JSON.stringify({ ok: false, reason: "error", detail: e.message }), {
       status: 500,
-      headers: { "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
