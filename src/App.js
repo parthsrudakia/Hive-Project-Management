@@ -826,17 +826,20 @@ function AdminOverview({ tasks, members, onSelectMember, overviewFilter, onCardC
   const inprog = tasks.filter(t => t.status === "in progress").length;
   const notStarted = tasks.filter(t => t.status === "not started").length;
   const urgent = tasks.filter(t => t.urgent).length;
+  const overdue = tasks.filter(t => t.status !== "completed" && t.deadline && daysUntil(t.deadline) < 0).length;
   const cards = [
     { key: "total", label: "Total", num: tasks.length, color: "var(--text)" },
     { key: "not started", label: "Not Started", num: notStarted, color: "var(--danger)" },
     { key: "in progress", label: "In Progress", num: inprog, color: "var(--info)" },
     { key: "completed", label: "Completed", num: done, color: "var(--success)" },
     { key: "urgent", label: "Urgent", num: urgent, color: "var(--danger)" },
+    { key: "overdue", label: "Overdue", num: overdue, color: "var(--danger)" },
   ];
 
   const filteredTasks = overviewFilter
     ? overviewFilter === "total" ? tasks
       : overviewFilter === "urgent" ? tasks.filter(t => t.urgent)
+      : overviewFilter === "overdue" ? tasks.filter(t => t.status !== "completed" && t.deadline && daysUntil(t.deadline) < 0)
       : tasks.filter(t => t.status === overviewFilter)
     : null;
 
@@ -847,7 +850,7 @@ function AdminOverview({ tasks, members, onSelectMember, overviewFilter, onCardC
   return (
     <div className="fadein">
       <div className="page-header"><div><div className="page-title"><em>Overview</em></div><div className="subtitle">{tasks.length} total projects across all members</div></div></div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 16 }}>
         {cards.map(s => (
           <div className="overview-stat" key={s.key}
             onClick={() => onCardClick(overviewFilter === s.key ? null : s.key)}
