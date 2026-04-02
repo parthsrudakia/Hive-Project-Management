@@ -322,11 +322,11 @@ function Toast({ msg, type, onDone }) {
   return <div className={`toast${type === "error" ? " error" : ""}`}>{msg}</div>;
 }
 
-function PasswordInput({ value, onChange, placeholder = "Password" }) {
+function PasswordInput({ value, onChange, placeholder = "Password", onKeyDown }) {
   const [show, setShow] = useState(false);
   return (
     <div className="pw-wrap">
-      <input type={show ? "text" : "password"} value={value} onChange={onChange} placeholder={placeholder} />
+      <input type={show ? "text" : "password"} value={value} onChange={onChange} placeholder={placeholder} onKeyDown={onKeyDown} />
       <button className="pw-eye" type="button" onClick={() => setShow(s => !s)}>
         {show ? <Icon.EyeOff /> : <Icon.Eye />}
       </button>
@@ -1375,7 +1375,7 @@ export default function App() {
             </div>
             <div className="field">
               <label>Password</label>
-              <PasswordInput value={loginPw} onChange={e => setLoginPw(e.target.value)} />
+              <PasswordInput value={loginPw} onChange={e => setLoginPw(e.target.value)} onKeyDown={e => e.key === "Enter" && login()} />
             </div>
             {loginErr && <div style={{ color: "var(--danger)", fontSize: 12, marginBottom: 14 }}>{loginErr}</div>}
             <button className="btn-primary w-full" style={{ padding: 12, borderRadius: 6 }} onClick={login} disabled={appLoading}>
