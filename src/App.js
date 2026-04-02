@@ -30,7 +30,7 @@ async function hashPassword(password) {
 
 // Only store safe fields in session — never store password_hash
 function safeUser(user) {
-  return { id: user.id, name: user.name, role: user.role };
+  return { id: user.id, name: user.name, role: user.role, email: user.email || "" };
 }
 
 // ── Session Management ────────────────────────────────────────────────────────
@@ -128,6 +128,21 @@ async function sendPushNotification(userId, title, body) {
     });
   } catch (e) {
     console.warn("Push send failed:", e.message);
+  }
+}
+
+async function sendEmailNotification(payload) {
+  try {
+    await fetch(`${SUPABASE_URL}/functions/v1/send-email-notification`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_KEY,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    console.warn("Email send failed:", e.message);
   }
 }
 
@@ -639,9 +654,45 @@ function RenameMembersModal({ users, onClose, onRename }) {
   );
 }
 
+// ── Edit Emails Modal ────────────────────────────────────────────────────────
+function EditEmailsModal({ users, onClose, onSave }) {
+  const [emails, setEmails] = useState(() => Object.fromEntries(users.map(u => [u.id, u.email || ""])));
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function submit() {
+    setSaving(true);
+    await onSave(Object.fromEntries(Object.entries(emails).map(([id, e]) => [id, e.trim() || null])));
+    setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal fadein">
+        <div className="modal-title"><Icon.Bell /> Member Emails</div>
+        <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 16, lineHeight: 1.5 }}>
+          Members with an email will receive notifications when their projects are created or updated.
+        </div>
+        {users.map(u => (
+          <div className="field" key={u.id}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8 }}><span className="member-chip">{u.id}</span> {u.name}</label>
+            <input type="email" value={emails[u.id] || ""} onChange={e => { setEmails(n => ({ ...n, [u.id]: e.target.value })); setSaved(false); }} placeholder="email@example.com" />
+          </div>
+        ))}
+        {saved && <div style={{ color: "var(--success)", fontSize: 12, marginBottom: 14 }}>&#10003; Emails updated</div>}
+        <div className="flex gap-8" style={{ justifyContent: "flex-end" }}>
+          <button className="btn-ghost" onClick={onClose}>Close</button>
+          <button className="btn-primary" onClick={submit} disabled={saving}>{saving ? "Saving…" : "Save Emails"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Add Member Modal ──────────────────────────────────────────────────────────
 function AddMemberModal({ existingUsers, onClose, onAdd }) {
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
@@ -657,8 +708,8 @@ function AddMemberModal({ existingUsers, onClose, onAdd }) {
     if (!password.trim()) { setErr("Password is required."); return; }
     setSaving(true);
     try {
-      await onAdd({ id: nextId, name: name.trim(), password: password.trim(), role: "member" });
-      setAdded({ id: nextId, name: name.trim() }); setName(""); setPassword(""); setErr("");
+      await onAdd({ id: nextId, name: name.trim(), password: password.trim(), role: "member", email: email.trim() || null });
+      setAdded({ id: nextId, name: name.trim() }); setName(""); setPassword(""); setEmail(""); setErr("");
     } catch (e) { setErr(e.message); }
     setSaving(false);
   }
@@ -673,6 +724,7 @@ function AddMemberModal({ existingUsers, onClose, onAdd }) {
           <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: "auto" }}>assigned automatically</span>
         </div>
         <div className="field"><label>Display Name *</label><input placeholder="e.g. Alex Johnson" value={name} onChange={e => { setName(e.target.value); setErr(""); setAdded(null); }} autoFocus /></div>
+        <div className="field"><label>Email</label><input type="email" placeholder="e.g. alex@example.com" value={email} onChange={e => { setEmail(e.target.value); setErr(""); setAdded(null); }} /></div>
         <div className="field"><label>Password *</label><PasswordInput value={password} onChange={e => { setPassword(e.target.value); setErr(""); setAdded(null); }} placeholder="Set a password" /></div>
         {err && <div style={{ color: "var(--danger)", fontSize: 12, marginBottom: 14 }}>{err}</div>}
         {added && <div style={{ color: "var(--success)", fontSize: 12, marginBottom: 14 }}>✓ <strong>{added.name}</strong> added as <strong>{added.id}</strong></div>}
@@ -787,6 +839,38 @@ function AdminOverview({ tasks, members, onSelectMember }) {
 }
 
 // ── Change Password Inline (used inside Settings page) ────────────────────────
+function EmailInlineEdit({ currentUser, onSave, showToast }) {
+  const [email, setEmail] = useState(currentUser.email || "");
+  const [saving, setSaving] = useState(false);
+  const hasChanged = email.trim() !== (currentUser.email || "");
+
+  async function submit() {
+    if (!email.trim()) { showToast("Please enter an email address.", "error"); return; }
+    setSaving(true);
+    try {
+      await onSave(email.trim());
+    } catch (e) { showToast("Failed: " + e.message, "error"); }
+    setSaving(false);
+  }
+
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "20px 24px", marginBottom: 16 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".08em", color: "var(--text3)", textTransform: "uppercase", marginBottom: 12 }}>Email Notifications</div>
+      {!currentUser.email && (
+        <div style={{ background: "#FFF7ED", border: "1px solid #FCD34D", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#B45309", lineHeight: 1.5 }}>
+          Add your email to receive notifications when projects are assigned or updated.
+        </div>
+      )}
+      <div className="flex gap-8 items-center">
+        <input type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} style={{ flex: 1 }} />
+        <button className="btn-primary" onClick={submit} disabled={saving || !hasChanged} style={{ whiteSpace: "nowrap" }}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ChangePasswordInline({ currentUser, onSave, showToast }) {
   const [pw, setPw] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -945,6 +1029,46 @@ function DeleteMemberModal({ users, tasks, onClose, onDelete }) {
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
+// ── Email Prompt Modal ───────────────────────────────────────────────────────
+function EmailPromptModal({ currentUser, onClose, onSave }) {
+  const [email, setEmail] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function submit() {
+    if (!email.trim()) { setErr("Please enter your email address."); return; }
+    setSaving(true);
+    try {
+      await onSave(email.trim());
+      onClose();
+    } catch (e) { setErr(e.message); }
+    setSaving(false);
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal fadein" style={{ maxWidth: 440, textAlign: "center" }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>&#9993;</div>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 600, marginBottom: 8 }}>
+          Add Your Email
+        </div>
+        <div style={{ fontSize: 13, color: "var(--text2)", marginBottom: 24, lineHeight: 1.6 }}>
+          Stay in the loop! Add your email to receive notifications when projects are assigned or updated.
+        </div>
+        <div className="field" style={{ textAlign: "left" }}>
+          <label>Email Address</label>
+          <input type="email" placeholder="you@example.com" value={email} onChange={e => { setEmail(e.target.value); setErr(""); }} autoFocus />
+        </div>
+        {err && <div style={{ color: "var(--danger)", fontSize: 12, marginBottom: 14 }}>{err}</div>}
+        <div className="flex gap-8" style={{ justifyContent: "center" }}>
+          <button className="btn-ghost" onClick={onClose}>Skip for Now</button>
+          <button className="btn-primary" onClick={submit} disabled={saving}>{saving ? "Saving…" : "Save Email"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState([]);
@@ -960,6 +1084,7 @@ export default function App() {
   const [showRename, setShowRename] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [showDeleteMember, setShowDeleteMember] = useState(false);
+  const [showEditEmails, setShowEditEmails] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [filterMember, setFilterMember] = useState("all");
@@ -968,6 +1093,7 @@ export default function App() {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
   const [showAttentionPopup, setShowAttentionPopup] = useState(false);
+  const [showEmailPrompt, setShowEmailPrompt] = useState(false);
 
   // Check for saved session and biometric support on mount
   useEffect(() => {
@@ -978,7 +1104,7 @@ export default function App() {
       if (saved) {
         // Re-verify user still exists in DB and get fresh role
         try {
-          const fresh = await sb(`users?id=eq.${encodeURIComponent(saved.id)}&select=id,name,role`);
+          const fresh = await sb(`users?id=eq.${encodeURIComponent(saved.id)}&select=id,name,role,email`);
           if (!fresh || fresh.length === 0) { clearSession(); return; }
           const verifiedUser = safeUser(fresh[0]);
           setSessionUser(verifiedUser);
@@ -1031,6 +1157,18 @@ export default function App() {
       const attentionCount = (allTasks || []).filter(t => t.needs_attention).length;
       if (attentionCount > 0) setShowAttentionPopup(true);
     }
+    // Prompt member to add email if missing
+    if (!user.email) {
+      setShowEmailPrompt(true);
+    }
+  }
+
+  async function saveMyEmail(email) {
+    await sb(`users?id=eq.${encodeURIComponent(currentUser.id)}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify({ email }) });
+    setCurrentUser(u => ({ ...u, email }));
+    saveSession({ ...currentUser, email });
+    await fetchUsers();
+    showToast("Email saved!");
   }
 
   async function handleBiometricLogin() {
@@ -1086,13 +1224,36 @@ export default function App() {
       "New Project Assigned 📋",
       `You have a new project: "${form.title}"`
     );
+    sendEmailNotification({
+      user_id: form.assignedTo, type: "task_created",
+      task: { title: form.title, description: form.description || "", deadline: form.deadline || null, assigned_to: form.assignedTo },
+    });
   }
 
   async function updateStatus(taskId, status) {
+    const oldTask = tasks.find(t => t.id === taskId);
     await sb(`tasks?id=eq.${taskId}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify({ status }) });
     const updated = await fetchTasks();
     const fresh = (updated || []).find(t => t.id === taskId);
     if (fresh && selectedTask?.id === taskId) setSelectedTask(fresh);
+    if (oldTask) {
+      sendEmailNotification({
+        user_id: oldTask.assigned_to, type: "task_updated",
+        task: { title: oldTask.title },
+        changes: [{ field: "Status", from: oldTask.status, to: status }],
+      });
+      // Notify admin when a member marks a task as completed
+      if (status === "completed" && currentUser.role !== "admin") {
+        const admin = users.find(u => u.role === "admin");
+        if (admin) {
+          sendEmailNotification({
+            user_id: admin.id, type: "task_updated",
+            task: { title: oldTask.title },
+            changes: [{ field: "Status", from: oldTask.status, to: status }, { field: "Completed by", to: currentUser.name || currentUser.id }],
+          });
+        }
+      }
+    }
   }
 
   async function addComment(taskId, text) {
@@ -1100,6 +1261,14 @@ export default function App() {
     const updated = await fetchTasks();
     const fresh = (updated || []).find(t => t.id === taskId);
     if (fresh) setSelectedTask(fresh);
+    const task = tasks.find(t => t.id === taskId);
+    if (task && task.assigned_to !== currentUser.id) {
+      sendEmailNotification({
+        user_id: task.assigned_to, type: "comment_added",
+        task: { title: task.title },
+        comment: { author: currentUser.name || currentUser.id, text },
+      });
+    }
   }
 
   async function clearDoneTasks() {
@@ -1115,18 +1284,34 @@ export default function App() {
   }
 
   async function updateDeadline(taskId, deadline) {
+    const oldTask = tasks.find(t => t.id === taskId);
     await sb(`tasks?id=eq.${taskId}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify({ deadline: deadline || null }) });
     const updated = await fetchTasks();
     const fresh = (updated || []).find(t => t.id === taskId);
     if (fresh && selectedTask?.id === taskId) setSelectedTask(fresh);
     showToast(deadline ? "Deadline updated!" : "Deadline removed.");
+    if (oldTask) {
+      sendEmailNotification({
+        user_id: oldTask.assigned_to, type: "task_updated",
+        task: { title: oldTask.title },
+        changes: [{ field: "Deadline", from: oldTask.deadline || "No deadline", to: deadline || "No deadline" }],
+      });
+    }
   }
 
   async function updateTrack(taskId, track_status) {
+    const oldTask = tasks.find(t => t.id === taskId);
     await sb(`tasks?id=eq.${taskId}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify({ track_status }) });
     const updated = await fetchTasks();
     const fresh = (updated || []).find(t => t.id === taskId);
     if (fresh && selectedTask?.id === taskId) setSelectedTask(fresh);
+    if (oldTask) {
+      sendEmailNotification({
+        user_id: oldTask.assigned_to, type: "task_updated",
+        task: { title: oldTask.title },
+        changes: [{ field: "Track Status", from: oldTask.track_status || "Not set", to: track_status }],
+      });
+    }
   }
 
   async function toggleAttention(taskId, needs_attention) {
@@ -1135,6 +1320,14 @@ export default function App() {
     const fresh = (updated || []).find(t => t.id === taskId);
     if (fresh && selectedTask?.id === taskId) setSelectedTask(fresh);
     if (needs_attention) showToast("Admin has been notified ✓");
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+      sendEmailNotification({
+        user_id: task.assigned_to, type: "task_updated",
+        task: { title: task.title },
+        changes: [{ field: "Needs Attention", to: needs_attention ? "Yes — flagged for admin" : "Dismissed" }],
+      });
+    }
   }
 
   async function resetPassword(userId, pw) {
@@ -1151,9 +1344,16 @@ export default function App() {
     await fetchUsers(); showToast("Names updated!");
   }
 
-  async function addMember({ id, name, password, role }) {
+  async function updateEmails(emailMap) {
+    await Promise.all(Object.entries(emailMap).map(([id, email]) =>
+      sb(`users?id=eq.${encodeURIComponent(id)}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify({ email }) })
+    ));
+    await fetchUsers(); showToast("Emails updated!");
+  }
+
+  async function addMember({ id, name, password, role, email }) {
     const hash = await hashPassword(password);
-    await sb("users", { method: "POST", prefer: "return=representation", body: JSON.stringify({ id, name, role, password_hash: hash }) });
+    await sb("users", { method: "POST", prefer: "return=representation", body: JSON.stringify({ id, name, role, password_hash: hash, email: email || null }) });
     await fetchUsers(); showToast(`${name} added as ${id}`);
   }
 
@@ -1317,6 +1517,7 @@ export default function App() {
               <div className="sidebar-section">Admin</div>
               <div className="nav-pill" onClick={() => setShowReset(true)}><Icon.Key /> <span>Reset Password</span></div>
               <div className="nav-pill" onClick={() => setShowRename(true)}><Icon.Edit /> <span>Rename Members</span></div>
+              <div className="nav-pill" onClick={() => setShowEditEmails(true)}><Icon.Bell /> <span>Edit Emails</span></div>
               <div className="nav-pill" onClick={() => setShowAddMember(true)}><Icon.UserPlus /> <span>Add Member</span></div>
               <div className="nav-pill" onClick={() => setShowDeleteMember(true)} style={{ color: "var(--danger)" }}><Icon.UserMinus /> <span>Remove Member</span></div>
             </>
@@ -1365,7 +1566,7 @@ export default function App() {
                       <div onClick={() => setSelectedTask(t)} style={{ cursor: "pointer" }}>
                         <TaskCard task={t} members={members} onClick={() => setSelectedTask(t)} />
                       </div>
-                      <div style={{ borderTop: "1px solid #FCD34D", padding: "10px 22px", background: "#FFFBEB", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ borderTop: "1px solid #FCD34D", padding: "10px 22px", background: "#FFFBEB", display: "flex", alignItems: "center", gap: 12 }}>
                         <span style={{ fontSize: 12, color: "#B45309", fontWeight: 500 }}>🔔 Flagged for your attention</span>
                         <button
                           onClick={e => { e.stopPropagation(); toggleAttention(t.id, false); }}
@@ -1511,6 +1712,9 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Email card */}
+              <EmailInlineEdit currentUser={currentUser} onSave={saveMyEmail} showToast={showToast} />
+
               {/* Change password card */}
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "20px 24px", marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".08em", color: "var(--text3)", textTransform: "uppercase", marginBottom: 16 }}>Change Password</div>
@@ -1529,6 +1733,8 @@ export default function App() {
       {showCreate && <CreateTaskModal members={members} lockedTo={!isAdmin ? currentUser : null} onClose={() => setShowCreate(false)} onCreate={createTask} />}
       {showReset && <ResetPasswordModal users={users} onClose={() => setShowReset(false)} onReset={resetPassword} />}
       {showRename && <RenameMembersModal users={members} onClose={() => setShowRename(false)} onRename={renameMembers} />}
+      {showEditEmails && <EditEmailsModal users={members} onClose={() => setShowEditEmails(false)} onSave={updateEmails} />}
+      {showEmailPrompt && <EmailPromptModal currentUser={currentUser} onClose={() => setShowEmailPrompt(false)} onSave={saveMyEmail} />}
       {showAddMember && <AddMemberModal existingUsers={users} onClose={() => setShowAddMember(false)} onAdd={addMember} />}
       {showDeleteMember && <DeleteMemberModal users={members} tasks={tasks} onClose={() => setShowDeleteMember(false)} onDelete={deleteMember} />}
       {showChangePassword && <ChangePasswordModal currentUser={currentUser} onClose={() => setShowChangePassword(false)} onSave={resetPassword} />}
