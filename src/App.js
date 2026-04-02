@@ -1452,16 +1452,18 @@ export default function App() {
   const activeTasks = [...filteredActive].sort(sortFn);
   const completedTasks = [...allVisible.filter(t => t.status === "completed")].sort(sortFn);
   const attentionTasks = tasks.filter(t => t.needs_attention);
+  const overdueTasks = (isAdmin ? tasks : tasks.filter(t => t.assigned_to === currentUser?.id))
+    .filter(t => t.status !== "completed" && t.deadline && daysUntil(t.deadline) < 0);
 
   const navItems = isAdmin
     ? [
         { id: "overview",   label: "Overview",        icon: <Icon.Overview /> },
-        { id: "tasks",      label: "All Projects",        icon: <Icon.Task /> },
+        { id: "tasks",      label: "All Projects",        icon: <Icon.Task />, badge: overdueTasks.length, badgeColor: "var(--danger)" },
         { id: "attention",  label: "Needs Attention",  icon: <Icon.Bell />, badge: attentionTasks.length },
         { id: "settings",   label: "Admin Settings",  icon: <Icon.Settings /> },
       ]
     : [
-        { id: "tasks",      label: "My Projects",         icon: <Icon.Task /> },
+        { id: "tasks",      label: "My Projects",         icon: <Icon.Task />, badge: overdueTasks.length, badgeColor: "var(--danger)" },
         { id: "completed",  label: "Completed",        icon: <Icon.Track /> },
         { id: "settings",   label: "My Account",       icon: <Icon.User /> },
       ];
@@ -1520,7 +1522,7 @@ export default function App() {
               <span style={{ flex: 1 }}>{n.label}</span>
               {n.badge > 0 && (
                 <span style={{
-                  background: "#E8392A", color: "#fff",
+                  background: n.badgeColor || "#E8392A", color: "#fff",
                   borderRadius: "50%", fontSize: 10, fontWeight: 700,
                   minWidth: 18, height: 18,
                   display: "flex", alignItems: "center", justifyContent: "center",
