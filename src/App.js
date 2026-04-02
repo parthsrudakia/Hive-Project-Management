@@ -135,6 +135,25 @@ async function sendEmailNotification(payload) {
   }
 }
 
+// ── Batched Email Notifications ──────────────────────────────────────────────
+// Collects changes per user+task, flushes as one email after 2s of inactivity
+const _emailBatch = {};
+const _emailTimers = {};
+const BATCH_DELAY = 2000;
+
+function queueEmailChange(userId, taskTitle, change) {
+  const key = `${userId}::${taskTitle}`;
+  if (!_emailBatch[key]) _emailBatch[key] = { user_id: userId, task: { title: taskTitle }, changes: [] };
+  _emailBatch[key].changes.push(change);
+  clearTimeout(_emailTimers[key]);
+  _emailTimers[key] = setTimeout(() => {
+    const batch = _emailBatch[key];
+    delete _emailBatch[key];
+    delete _emailTimers[key];
+    sendEmailNotification({ ...batch, type: "task_updated" });
+  }, BATCH_DELAY);
+}
+
 // ── Icons ─────────────────────────────────────────────────────────────────────
 const Icon = {
   Hexagon: () => (
@@ -1168,10 +1187,12 @@ export default function App() {
       "New Project Assigned 📋",
       `You have a new project: "${form.title}"`
     );
-    sendEmailNotification({
-      user_id: form.assignedTo, type: "task_created",
-      task: { title: form.title, description: form.description || "", deadline: form.deadline || null, assigned_to: form.assignedTo },
-    });
+    if (isAdmin) {
+      sendEmailNotification({
+        user_id: form.assignedTo, type: "task_created",
+        task: { title: form.title, description: form.description || "", deadline: form.deadline || null, assigned_to: form.assignedTo },
+      });
+    }
   }
 
   async function updateStatus(taskId, status) {
@@ -1181,15 +1202,11 @@ export default function App() {
     const fresh = (updated || []).find(t => t.id === taskId);
     if (fresh && selectedTask?.id === taskId) setSelectedTask(fresh);
     if (oldTask) {
-      if (currentUser.id !== oldTask.assigned_to) {
-        sendEmailNotification({
-          user_id: oldTask.assigned_to, type: "task_updated",
-          task: { title: oldTask.title },
-          changes: [{ field: "Status", from: oldTask.status, to: status }],
-        });
+      if (isAdmin) {
+        queueEmailChange(oldTask.assigned_to, oldTask.title, { field: "Status", from: oldTask.status, to: status });
       }
       // Notify admin when a member marks a task as completed
-      if (status === "completed" && currentUser.role !== "admin") {
+      if (status === "completed" && !isAdmin) {
         const admin = users.find(u => u.role === "admin");
         if (admin) {
           sendEmailNotification({
@@ -1207,13 +1224,15 @@ export default function App() {
     const updated = await fetchTasks();
     const fresh = (updated || []).find(t => t.id === taskId);
     if (fresh) setSelectedTask(fresh);
-    const task = tasks.find(t => t.id === taskId);
-    if (task && task.assigned_to !== currentUser.id) {
-      sendEmailNotification({
-        user_id: task.assigned_to, type: "comment_added",
-        task: { title: task.title },
-        comment: { author: currentUser.name || currentUser.id, text },
-      });
+    if (isAdmin) {
+      const task = tasks.find(t => t.id === taskId);
+      if (task) {
+        sendEmailNotification({
+          user_id: task.assigned_to, type: "comment_added",
+          task: { title: task.title },
+          comment: { author: currentUser.name || currentUser.id, text },
+        });
+      }
     }
   }
 
@@ -1236,12 +1255,8 @@ export default function App() {
     const fresh = (updated || []).find(t => t.id === taskId);
     if (fresh && selectedTask?.id === taskId) setSelectedTask(fresh);
     showToast(deadline ? "Deadline updated!" : "Deadline removed.");
-    if (oldTask && currentUser.id !== oldTask.assigned_to) {
-      sendEmailNotification({
-        user_id: oldTask.assigned_to, type: "task_updated",
-        task: { title: oldTask.title },
-        changes: [{ field: "Deadline", from: oldTask.deadline || "No deadline", to: deadline || "No deadline" }],
-      });
+    if (oldTask && isAdmin) {
+      queueEmailChange(oldTask.assigned_to, oldTask.title, { field: "Deadline", from: oldTask.deadline || "No deadline", to: deadline || "No deadline" });
     }
   }
 
@@ -1251,12 +1266,8 @@ export default function App() {
     const updated = await fetchTasks();
     const fresh = (updated || []).find(t => t.id === taskId);
     if (fresh && selectedTask?.id === taskId) setSelectedTask(fresh);
-    if (oldTask && currentUser.id !== oldTask.assigned_to) {
-      sendEmailNotification({
-        user_id: oldTask.assigned_to, type: "task_updated",
-        task: { title: oldTask.title },
-        changes: [{ field: "Track Status", from: oldTask.track_status || "Not set", to: track_status }],
-      });
+    if (oldTask && isAdmin) {
+      queueEmailChange(oldTask.assigned_to, oldTask.title, { field: "Track Status", from: oldTask.track_status || "Not set", to: track_status });
     }
   }
 
@@ -1266,13 +1277,11 @@ export default function App() {
     const fresh = (updated || []).find(t => t.id === taskId);
     if (fresh && selectedTask?.id === taskId) setSelectedTask(fresh);
     if (needs_attention) showToast("Admin has been notified ✓");
-    const task = tasks.find(t => t.id === taskId);
-    if (task && currentUser.id !== task.assigned_to) {
-      sendEmailNotification({
-        user_id: task.assigned_to, type: "task_updated",
-        task: { title: task.title },
-        changes: [{ field: "Needs Attention", to: needs_attention ? "Yes — flagged for admin" : "Dismissed" }],
-      });
+    if (isAdmin) {
+      const task = tasks.find(t => t.id === taskId);
+      if (task) {
+        queueEmailChange(task.assigned_to, task.title, { field: "Needs Attention", to: needs_attention ? "Yes — flagged for admin" : "Dismissed" });
+      }
     }
   }
 
