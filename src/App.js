@@ -240,7 +240,7 @@ const STYLES = `
   button{font-family:'Inter',sans-serif;font-weight:500;cursor:pointer;border:none;border-radius:var(--radius);transition:all .18s;font-size:13px}
   button:active{transform:scale(.98)}
   button:disabled{opacity:.6;cursor:not-allowed}
-  .btn-primary{background:var(--accent);color:#fff;padding:10px 20px}
+  .btn-primary{background:var(--accent);color:var(--bg);padding:10px 20px}
   .btn-primary:hover:not(:disabled){background:var(--accent2)}
   .btn-ghost{background:transparent;color:var(--text2);padding:9px 16px;border:1px solid var(--border)}
   .btn-ghost:hover:not(:disabled){border-color:var(--border2);color:var(--text);background:var(--surface2)}
