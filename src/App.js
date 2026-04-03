@@ -321,7 +321,7 @@ const STYLES = `
     .sidebar-bottom{padding-top:12px}
     .sidebar-bottom > div:first-child{display:none}
   }
-  .toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:#fff;padding:12px 20px;border-radius:var(--radius);font-size:13px;z-index:200;animation:fadeIn .2s ease;box-shadow:0 8px 24px rgba(26,25,22,.2)}
+  .toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:var(--bg);padding:12px 20px;border-radius:var(--radius);font-size:13px;z-index:200;animation:fadeIn .2s ease;box-shadow:0 8px 24px rgba(26,25,22,.2)}
   .toast.error{background:var(--danger)}
 `;
 
