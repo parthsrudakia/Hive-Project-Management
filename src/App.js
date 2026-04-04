@@ -1779,6 +1779,33 @@ export default function App() {
                   </div>
                 ))}
               </div>
+
+              {/* Personal account section */}
+              <div style={{ marginTop: 32 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".08em", color: "var(--text3)", textTransform: "uppercase", marginBottom: 12 }}>Your Account</div>
+
+                {/* Profile card */}
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "20px 24px", marginBottom: 16 }}>
+                  <div className="flex items-center gap-12">
+                    <div style={{ width: 48, height: 48, borderRadius: "50%", background: "var(--accent-dim)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Icon.User />
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 600, fontSize: 20 }}>{currentUser.name}</div>
+                      <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>{currentUser.id}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Email card */}
+                <EmailInlineEdit currentUser={currentUser} onSave={saveMyEmail} showToast={showToast} />
+
+                {/* Change password card */}
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "20px 24px", marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".08em", color: "var(--text3)", textTransform: "uppercase", marginBottom: 16 }}>Change Password</div>
+                  <ChangePasswordInline currentUser={currentUser} onSave={resetPassword} showToast={showToast} />
+                </div>
+              </div>
             </div>
           )}
 
