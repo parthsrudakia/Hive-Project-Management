@@ -1290,6 +1290,7 @@ export default function App() {
   const [sortBy, setSortBy] = useState("default");
   const [toast, setToast] = useState(null);
   const [showAttentionPopup, setShowAttentionPopup] = useState(false);
+  const [showPendingReviewPopup, setShowPendingReviewPopup] = useState(false);
   const [showEmailPrompt, setShowEmailPrompt] = useState(false);
 
   // Check for saved session on mount and auto-resume
@@ -1345,11 +1346,13 @@ export default function App() {
     await Promise.all([fetchUsers(), fetchTasks()]);
     setPage(user.role === "admin" ? "overview" : "tasks");
     registerPush(user.id);
-    // Show attention popup for admin if there are flagged tasks
+    // Show popups for admin if there are flagged or pending review tasks
     if (user.role === "admin") {
       const allTasks = await sb("tasks?select=*,comments(id,author,text,created_at)&order=created_at.desc");
       const attentionCount = (allTasks || []).filter(t => t.needs_attention).length;
       if (attentionCount > 0) setShowAttentionPopup(true);
+      const pendingCount = (allTasks || []).filter(t => t.status === "pending_review").length;
+      if (pendingCount > 0) setShowPendingReviewPopup(true);
     }
     // Prompt member to add email if missing
     if (!user.email) {
@@ -2028,6 +2031,37 @@ export default function App() {
               <button className="btn-ghost" onClick={() => setShowAttentionPopup(false)}>Dismiss</button>
               <button className="btn-primary" onClick={() => { setShowAttentionPopup(false); setPage("attention"); }}>
                 View All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPendingReviewPopup && !showAttentionPopup && isAdmin && (
+        <div className="modal-backdrop" onClick={() => setShowPendingReviewPopup(false)}>
+          <div className="modal fadein" style={{ maxWidth: 420, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>📋</div>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 600, marginBottom: 8 }}>
+              Pending Reviews
+            </div>
+            <div style={{ fontSize: 14, color: "var(--text2)", marginBottom: 24, lineHeight: 1.6 }}>
+              <strong style={{ color: "var(--attn-text)" }}>{pendingReviewTasks.length} project{pendingReviewTasks.length !== 1 ? "s" : ""}</strong> {pendingReviewTasks.length === 1 ? "has" : "have"} been submitted for your review.
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              {pendingReviewTasks.slice(0, 3).map(t => (
+                <div key={t.id} style={{ background: "var(--warn-bg)", border: "1px solid var(--warn-border)", borderRadius: 8, padding: "10px 14px", marginBottom: 8, textAlign: "left" }}>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 600, fontSize: 15 }}>{t.title}</div>
+                  <div style={{ fontSize: 11, color: "var(--attn-text)", marginTop: 3 }}>
+                    {members.find(m => m.id === t.assigned_to)?.name || t.assigned_to} · pending review
+                  </div>
+                </div>
+              ))}
+              {pendingReviewTasks.length > 3 && <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 4 }}>+{pendingReviewTasks.length - 3} more</div>}
+            </div>
+            <div className="flex gap-8" style={{ justifyContent: "center" }}>
+              <button className="btn-ghost" onClick={() => setShowPendingReviewPopup(false)}>Dismiss</button>
+              <button className="btn-primary" onClick={() => { setShowPendingReviewPopup(false); setPage("pending_review"); }}>
+                Review Now
               </button>
             </div>
           </div>
