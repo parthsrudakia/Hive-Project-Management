@@ -30,7 +30,14 @@ async function hashPassword(password) {
 
 // Only store safe fields in session — never store password_hash
 function safeUser(user) {
-  return { id: user.id, name: user.name, role: user.role, email: user.email || "" };
+  return {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    email: user.email || "",
+    email_notifications: user.email_notifications !== false,
+    push_notifications: user.push_notifications !== false,
+  };
 }
 
 // ── Session Management ────────────────────────────────────────────────────────
@@ -326,6 +333,13 @@ const STYLES = `
   }
   .toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:var(--bg);padding:12px 20px;border-radius:var(--radius);font-size:13px;z-index:200;animation:fadeIn .2s ease;box-shadow:0 8px 24px rgba(26,25,22,.2)}
   .toast.error{background:var(--danger)}
+  .toggle-switch{position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0}
+  .toggle-switch input{opacity:0;width:0;height:0}
+  .toggle-slider{position:absolute;cursor:pointer;inset:0;background:var(--border2);border-radius:99px;transition:background .2s}
+  .toggle-slider:before{content:"";position:absolute;height:16px;width:16px;left:3px;top:3px;background:var(--surface);border-radius:50%;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.18)}
+  .toggle-switch input:checked+.toggle-slider{background:var(--accent)}
+  .toggle-switch input:checked+.toggle-slider:before{transform:translateX(16px)}
+  .toggle-switch input:disabled+.toggle-slider{opacity:.5;cursor:not-allowed}
 `;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1021,6 +1035,31 @@ function AdminOverview({ tasks, members, onSelectMember, overviewFilter, onCardC
   );
 }
 
+// ── Notification toggle row (used inside Settings page) ──────────────────────
+function NotificationToggleRow({ icon, label, desc, checked, onChange }) {
+  const [saving, setSaving] = useState(false);
+  async function handleChange(e) {
+    setSaving(true);
+    await onChange(e.target.checked);
+    setSaving(false);
+  }
+  return (
+    <div className="flex items-center justify-between gap-12">
+      <div className="flex items-center gap-12" style={{ minWidth: 0 }}>
+        <div style={{ color: "var(--text2)", flexShrink: 0 }}>{icon}</div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{label}</div>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>{desc}</div>
+        </div>
+      </div>
+      <label className="toggle-switch">
+        <input type="checkbox" checked={checked} onChange={handleChange} disabled={saving} />
+        <span className="toggle-slider" />
+      </label>
+    </div>
+  );
+}
+
 // ── Change Password Inline (used inside Settings page) ────────────────────────
 function EmailInlineEdit({ currentUser, onSave, showToast }) {
   const [email, setEmail] = useState(currentUser.email || "");
@@ -1300,7 +1339,7 @@ export default function App() {
       if (saved) {
         // Re-verify user still exists in DB and get fresh role
         try {
-          const fresh = await sb(`users?id=eq.${encodeURIComponent(saved.id)}&select=id,name,role,email`);
+          const fresh = await sb(`users?id=eq.${encodeURIComponent(saved.id)}&select=id,name,role,email,email_notifications,push_notifications`);
           if (!fresh || fresh.length === 0) { clearSession(); return; }
           const verifiedUser = safeUser(fresh[0]);
           await resumeSession(verifiedUser);
@@ -1345,7 +1384,7 @@ export default function App() {
     setCurrentUser(user); setLoginId(""); setLoginPw("");
     await Promise.all([fetchUsers(), fetchTasks()]);
     setPage(user.role === "admin" ? "overview" : "tasks");
-    registerPush(user.id);
+    if (user.push_notifications !== false) registerPush(user.id);
     // Show popups for admin if there are flagged or pending review tasks
     if (user.role === "admin") {
       const allTasks = await sb("tasks?select=*,comments(id,author,text,created_at)&order=created_at.desc");
@@ -1366,6 +1405,19 @@ export default function App() {
     saveSession({ ...currentUser, email });
     await fetchUsers();
     showToast("Email saved!");
+  }
+
+  async function updateNotificationPref(key, value) {
+    try {
+      await sb(`users?id=eq.${encodeURIComponent(currentUser.id)}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify({ [key]: value }) });
+      const updated = { ...currentUser, [key]: value };
+      setCurrentUser(updated);
+      saveSession(updated);
+      if (key === "push_notifications" && value) registerPush(currentUser.id);
+      showToast(`${key === "email_notifications" ? "Email" : "Push"} notifications ${value ? "enabled" : "disabled"}`);
+    } catch (e) {
+      showToast("Update failed: " + e.message, "error");
+    }
   }
 
   function logout() {
@@ -1403,7 +1455,7 @@ export default function App() {
       // Notify admin when a member submits for review
       if (status === "pending_review" && !isAdmin) {
         const admin = users.find(u => u.role === "admin");
-        if (admin) {
+        if (admin && admin.email_notifications !== false) {
           sendEmailNotification({
             user_id: admin.id, type: "task_pending_review",
             task: { title: oldTask.title },
@@ -1945,6 +1997,26 @@ export default function App() {
 
                 {/* Email card */}
                 <EmailInlineEdit currentUser={currentUser} onSave={saveMyEmail} showToast={showToast} />
+
+                {/* Notification preferences */}
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "20px 24px", marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".08em", color: "var(--text3)", textTransform: "uppercase", marginBottom: 16 }}>Notifications</div>
+                  <NotificationToggleRow
+                    icon={<Icon.Bell />}
+                    label="Email notifications"
+                    desc="Receive updates when members submit projects for review"
+                    checked={currentUser.email_notifications !== false}
+                    onChange={v => updateNotificationPref("email_notifications", v)}
+                  />
+                  <div style={{ height: 1, background: "var(--border)", margin: "14px 0" }} />
+                  <NotificationToggleRow
+                    icon={<Icon.Bell />}
+                    label="Push notifications"
+                    desc="Receive browser push alerts on this device"
+                    checked={currentUser.push_notifications !== false}
+                    onChange={v => updateNotificationPref("push_notifications", v)}
+                  />
+                </div>
 
                 {/* Change password card */}
                 <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "20px 24px", marginBottom: 16 }}>
