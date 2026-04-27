@@ -460,7 +460,7 @@ function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddC
           </div>
           <div className="flex gap-8 items-center">
             {isAdmin && !confirmDelete && task.status !== "completed" && task.status !== "pending_review" && onNudge && (
-              <button className="btn-ghost" style={{ padding: "6px 12px", display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}
+              <button style={{ padding: "6px 12px", display: "flex", alignItems: "center", gap: 5, fontSize: 12, background: "var(--warn-bg)", color: "var(--warn-text)", border: "1px solid var(--warn-border)", fontWeight: 600 }}
                 onClick={() => onNudge(task)} title="Send reminder to assigned member">
                 <Icon.Nudge /> Nudge
               </button>
@@ -918,7 +918,7 @@ function TaskCard({ task, members, onClick, onNudge }) {
         )}
         {onNudge && task.status !== "completed" && task.status !== "pending_review" && (
           <button className="member-chip" onClick={(e) => { e.stopPropagation(); onNudge(task); }}
-            style={{ cursor: "pointer", background: "var(--accent-dim)", borderColor: "var(--border2)", color: "var(--text)", marginLeft: "auto" }}
+            style={{ cursor: "pointer", background: "var(--warn-bg)", borderColor: "var(--warn-border)", color: "var(--warn-text)", fontWeight: 600, marginLeft: "auto" }}
             title="Send reminder to member">
             <Icon.Nudge /> Nudge
           </button>
@@ -2216,7 +2216,7 @@ export default function App() {
                             ); })()}
                             {isAdmin && t.status !== "completed" && t.status !== "pending_review" && (
                               <button className="member-chip" onClick={(e) => { e.stopPropagation(); sendNudge(t); }}
-                                style={{ cursor: "pointer", background: "var(--accent-dim)", borderColor: "var(--border2)", color: "var(--text)", marginLeft: "auto" }}
+                                style={{ cursor: "pointer", background: "var(--warn-bg)", borderColor: "var(--warn-border)", color: "var(--warn-text)", fontWeight: 600, marginLeft: "auto" }}
                                 title="Send reminder to member">
                                 <Icon.Nudge /> Nudge
                               </button>
