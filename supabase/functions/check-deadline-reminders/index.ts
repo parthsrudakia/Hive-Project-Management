@@ -12,6 +12,28 @@ function formatDate(d: string): string {
   return date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 }
 
+function ymd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function nextRecurringAfter(day: number, refStr: string): string {
+  const [y, m, d] = String(refStr).slice(0, 10).split("-").map(Number);
+  const ref = new Date(y, m - 1, d);
+  ref.setHours(0, 0, 0, 0);
+  let yr = ref.getFullYear(), mo = ref.getMonth();
+  const lastDayThis = new Date(yr, mo + 1, 0).getDate();
+  const targetThis = Math.min(day, lastDayThis);
+  const candidateThis = new Date(yr, mo, targetThis);
+  if (candidateThis > ref) return ymd(candidateThis);
+  mo += 1;
+  const lastDayNext = new Date(yr, mo + 1, 0).getDate();
+  const targetNext = Math.min(day, lastDayNext);
+  return ymd(new Date(yr, mo, targetNext));
+}
+
 function reminderHtml(task: { title: string; deadline: string }, variant: "tomorrow" | "overdue", daysOverdue = 0) {
   const isOverdue = variant === "overdue";
   const badgeText = isOverdue
@@ -89,9 +111,42 @@ Deno.serve(async (req) => {
     const todayStr = today.toISOString().split("T")[0]; // YYYY-MM-DD
     const tomorrowStr = tomorrow.toISOString().split("T")[0];
 
+    // Roll forward expired recurring tasks (skip those still pending review)
+    const recurringRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/tasks?recurring=eq.true&deadline=lt.${todayStr}&status=neq.pending_review&select=id,deadline,recurring_day,last_completed_month,missed_months`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    );
+    const recurringTasks = await recurringRes.json();
+    let rolled = 0;
+    for (const t of recurringTasks || []) {
+      if (!t.recurring_day || !t.deadline) continue;
+      const cycleMonth = String(t.deadline).slice(0, 7);
+      const wasCompleted = t.last_completed_month === cycleMonth;
+      const missed: string[] = Array.isArray(t.missed_months) ? t.missed_months : [];
+      const newMissed = wasCompleted || missed.includes(cycleMonth) ? missed : [...missed, cycleMonth];
+      const patch = {
+        deadline: nextRecurringAfter(t.recurring_day, t.deadline),
+        status: "not started",
+        missed_months: newMissed,
+      };
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${t.id}`, {
+        method: "PATCH",
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify(patch),
+      });
+      if (r.ok) rolled++;
+      else console.error(`Rollover failed for task ${t.id}:`, await r.text());
+    }
+    if (rolled > 0) console.log(`Rolled forward ${rolled} recurring task(s)`);
+
     // Fetch tasks with deadline tomorrow OR overdue (deadline < today) that are not completed
     const tasksRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/tasks?or=(deadline.eq.${tomorrowStr},deadline.lt.${todayStr})&status=neq.completed&select=id,title,deadline,assigned_to`,
+      `${SUPABASE_URL}/rest/v1/tasks?or=(deadline.eq.${tomorrowStr},deadline.lt.${todayStr})&status=neq.completed&select=id,title,deadline,assigned_to,recurring`,
       { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
     );
     const tasks = await tasksRes.json();
@@ -118,6 +173,8 @@ Deno.serve(async (req) => {
       if (!user?.email) continue;
 
       const isOverdue = task.deadline < todayStr;
+      // Recurring tasks should never appear as overdue (rollover above advances them); guard regardless.
+      if (isOverdue && task.recurring) continue;
       const daysOverdue = isOverdue
         ? Math.round((today.getTime() - new Date(task.deadline + "T00:00:00").getTime()) / 86400000)
         : 0;

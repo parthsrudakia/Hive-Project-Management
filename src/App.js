@@ -482,8 +482,19 @@ function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddC
           <StatusPill status={task.status} />
           <span className="member-chip"><Icon.User /> {memberName}</span>
 
-          {/* Deadline — editable by admin, read-only for members */}
-          {isAdmin ? (
+          {/* Deadline — editable by admin (one-off only); recurring tasks show monthly chip */}
+          {task.recurring ? (
+            <>
+              <span className="member-chip" style={{ background: "var(--accent-dim)", borderColor: "var(--border2)" }}>
+                <Icon.Refresh /> Monthly · {ordinal(task.recurring_day)}
+              </span>
+              {dl && (
+                <span className="member-chip" style={{ color: dl.urgent ? "var(--danger)" : dl.color, borderColor: dl.urgent ? "var(--track-off-border)" : "var(--border)", background: dl.urgent ? "var(--track-off-bg)" : "var(--surface2)", fontWeight: dl.urgent ? 600 : 400 }}>
+                  <Icon.Clock /> {formatDate(task.deadline)} · {dl.text}
+                </span>
+              )}
+            </>
+          ) : isAdmin ? (
             editingDeadline ? (
               <div className="flex items-center gap-8">
                 <input type="date" value={deadlineVal} onChange={e => setDeadlineVal(e.target.value)}
@@ -522,7 +533,7 @@ function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddC
           <div className="mb-16">
             <label>Change Status</label>
             <div className="flex gap-8 flex-wrap">
-              {MEMBER_STATUS_LABELS.map(s => {
+              {(task.recurring ? ["not started", "in progress", "completed"] : MEMBER_STATUS_LABELS).map(s => {
                 const actualStatus = s === "submit for review" ? "pending_review" : s;
                 const isActive = task.status === actualStatus;
                 const c = STATUS_COLORS[actualStatus] || STATUS_COLORS["not started"];
@@ -539,6 +550,9 @@ function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddC
             </div>
             {task.status === "pending_review" && (
               <div style={{ fontSize: 12, color: "var(--attn-text)", marginTop: 8 }}>Awaiting admin review. You'll be notified once reviewed.</div>
+            )}
+            {task.recurring && (
+              <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 8 }}>Marking complete rolls this task to next month's deadline. No admin approval needed.</div>
             )}
           </div>
         )}
@@ -627,7 +641,7 @@ function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddC
 
 // ── Create Project Modal ─────────────────────────────────────────────────────────
 function CreateTaskModal({ members, lockedTo, onClose, onCreate }) {
-  const [form, setForm] = useState({ title: "", description: "", deadline: "", urgent: false, assignedTo: lockedTo?.id || members[0]?.id || "" });
+  const [form, setForm] = useState({ title: "", description: "", deadline: "", urgent: false, assignedTo: lockedTo?.id || members[0]?.id || "", recurring: false, recurring_day: new Date().getDate() });
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -654,12 +668,33 @@ function CreateTaskModal({ members, lockedTo, onClose, onCreate }) {
         <div className="field"><label>Project Title *</label><input placeholder="What needs to be done?" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} autoFocus /></div>
         <div className="field"><label>Description</label><textarea placeholder="Add details, context, instructions…" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
         <div className={lockedTo ? "" : "grid-2"}>
-          <div className="field"><label>Deadline (optional)</label><input type="date" value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} /></div>
+          {form.recurring ? (
+            <div className="field">
+              <label>Day of Month *</label>
+              <select value={form.recurring_day} onChange={e => setForm(f => ({ ...f, recurring_day: Number(e.target.value) }))}>
+                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{ordinal(d)} of every month</option>)}
+              </select>
+            </div>
+          ) : (
+            <div className="field"><label>Deadline (optional)</label><input type="date" value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} /></div>
+          )}
           {!lockedTo && (
             <div className="field"><label>Assign To *</label>
               <select value={form.assignedTo} onChange={e => setForm(f => ({ ...f, assignedTo: e.target.value }))}>
                 {members.map(m => <option key={m.id} value={m.id}>{m.name} ({m.id})</option>)}
               </select>
+            </div>
+          )}
+        </div>
+        <div className="field">
+          <label className="check-pill">
+            <input type="checkbox" checked={form.recurring} onChange={e => setForm(f => ({ ...f, recurring: e.target.checked }))} />
+            <span className="check-box"><Icon.Refresh /></span>
+            <span>Recurring (monthly)</span>
+          </label>
+          {form.recurring && (
+            <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 6, marginLeft: 28 }}>
+              If a month has fewer days than {form.recurring_day}, it falls on the last day of that month.
             </div>
           )}
         </div>
@@ -853,6 +888,11 @@ function TaskCard({ task, members, onClick }) {
               {task.track_status === "on_track" ? <><Icon.Track /> On Track</> : <><Icon.OffTrack /> Off Track</>}
             </span>
           )}
+          {task.recurring && (
+            <span className="tag" style={{ background: "var(--accent-dim)", color: "var(--text2)", border: "1px solid var(--border2)" }}>
+              <Icon.Refresh /> Monthly · {ordinal(task.recurring_day)}
+            </span>
+          )}
         </div>
         <span className="text-sm" style={{ fontSize: 11 }}>#{task.id}</span>
       </div>
@@ -967,6 +1007,39 @@ function ymdLocal(date) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function nextRecurringDateStr(day, refDateStr, includeRef = false) {
+  let ref;
+  if (refDateStr) {
+    const [y, m, d] = String(refDateStr).slice(0, 10).split("-").map(Number);
+    ref = new Date(y, m - 1, d);
+  } else {
+    ref = new Date();
+  }
+  ref.setHours(0, 0, 0, 0);
+  let yr = ref.getFullYear(), mo = ref.getMonth();
+  const lastDayThis = new Date(yr, mo + 1, 0).getDate();
+  const targetThis = Math.min(day, lastDayThis);
+  const candidateThis = new Date(yr, mo, targetThis);
+  if (includeRef ? candidateThis >= ref : candidateThis > ref) return ymdLocal(candidateThis);
+  mo += 1;
+  const lastDayNext = new Date(yr, mo + 1, 0).getDate();
+  const targetNext = Math.min(day, lastDayNext);
+  return ymdLocal(new Date(yr, mo, targetNext));
+}
+
+function recurringRolloverPatch(task) {
+  return {
+    deadline: nextRecurringDateStr(task.recurring_day, task.deadline, false),
+    last_completed_month: String(task.deadline).slice(0, 7),
+    status: "not started",
+  };
+}
+
+function ordinal(n) {
+  const s = ["th", "st", "nd", "rd"], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
 function CalendarPage({ tasks, members, currentUser, onTaskClick }) {
@@ -1584,7 +1657,21 @@ export default function App() {
   }
 
   async function createTask(form) {
-    await sb("tasks", { method: "POST", prefer: "return=representation", body: JSON.stringify({ title: form.title, description: form.description || null, deadline: form.deadline || null, urgent: form.urgent, assigned_to: form.assignedTo, status: "not started" }) });
+    const payload = {
+      title: form.title,
+      description: form.description || null,
+      urgent: form.urgent,
+      assigned_to: form.assignedTo,
+      status: "not started",
+    };
+    if (form.recurring) {
+      payload.recurring = true;
+      payload.recurring_day = form.recurring_day;
+      payload.deadline = nextRecurringDateStr(form.recurring_day, ymdLocal(new Date()), true);
+    } else {
+      payload.deadline = form.deadline || null;
+    }
+    await sb("tasks", { method: "POST", prefer: "return=representation", body: JSON.stringify(payload) });
     await fetchTasks(); setShowCreate(false); showToast("Project created!");
     // Notify the assigned member
     sendPushNotification(
@@ -1595,14 +1682,17 @@ export default function App() {
     if (isAdmin) {
       sendEmailNotification({
         user_id: form.assignedTo, type: "task_created",
-        task: { title: form.title, description: form.description || "", deadline: form.deadline || null, assigned_to: form.assignedTo },
+        task: { title: form.title, description: form.description || "", deadline: payload.deadline || null, assigned_to: form.assignedTo },
       });
     }
   }
 
   async function updateStatus(taskId, status) {
     const oldTask = tasks.find(t => t.id === taskId);
-    await sb(`tasks?id=eq.${taskId}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify({ status }) });
+    const isRecurringCompletion = oldTask?.recurring && status === "completed";
+    const body = isRecurringCompletion ? recurringRolloverPatch(oldTask) : { status };
+    await sb(`tasks?id=eq.${taskId}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify(body) });
+    if (isRecurringCompletion) showToast(`Cycle complete! Next deadline: ${formatDate(body.deadline)}.`);
     const updated = await fetchTasks();
     const fresh = (updated || []).find(t => t.id === taskId);
     if (fresh && selectedTask?.id === taskId) setSelectedTask(fresh);
@@ -1626,9 +1716,10 @@ export default function App() {
 
   async function approveTask(taskId) {
     const task = tasks.find(t => t.id === taskId);
-    await sb(`tasks?id=eq.${taskId}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify({ status: "completed" }) });
+    const patch = task?.recurring ? recurringRolloverPatch(task) : { status: "completed" };
+    await sb(`tasks?id=eq.${taskId}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify(patch) });
     await fetchTasks();
-    showToast("Project approved!");
+    showToast(task?.recurring ? "Approved! Rolled to next month." : "Project approved!");
     if (task) {
       sendEmailNotification({
         user_id: task.assigned_to, type: "task_review_completed",
