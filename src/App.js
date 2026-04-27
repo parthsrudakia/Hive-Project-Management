@@ -194,6 +194,7 @@ const Icon = {
   Calendar: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 1.5v3M11 1.5v3"/></svg>,
   ChevronLeft:  () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2.5L4.5 7 9 11.5"/></svg>,
   ChevronRight: () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 2.5L9.5 7 5 11.5"/></svg>,
+  Nudge: () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 5.5v3M2 5.5h2L9 3v8L4 8.5H2zM10.5 5.2c.7.6.7 2 0 2.6"/></svg>,
 };
 
 const STATUS_COLORS_LIGHT = {
@@ -421,7 +422,7 @@ function StatusPill({ status }) {
 }
 
 // ── Task Modal ────────────────────────────────────────────────────────────────
-function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddComment, onUpdateTrack, onToggleAttention, onDeleteTask, onUpdateDeadline }) {
+function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddComment, onUpdateTrack, onToggleAttention, onDeleteTask, onUpdateDeadline, onNudge }) {
   const [comment, setComment] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -457,6 +458,12 @@ function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddC
             <span>{task.title}</span>
           </div>
           <div className="flex gap-8 items-center">
+            {isAdmin && !confirmDelete && task.status !== "completed" && task.status !== "pending_review" && onNudge && (
+              <button className="btn-ghost" style={{ padding: "6px 12px", display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}
+                onClick={() => onNudge(task)} title="Send reminder to assigned member">
+                <Icon.Nudge /> Nudge
+              </button>
+            )}
             {isAdmin && !confirmDelete && (
               <button className="btn-danger" style={{ padding: "6px 12px", display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}
                 onClick={() => setConfirmDelete(true)}>
@@ -863,7 +870,7 @@ function AddMemberModal({ existingUsers, onClose, onAdd }) {
 }
 
 // ── Task Card ─────────────────────────────────────────────────────────────────
-function TaskCard({ task, members, onClick }) {
+function TaskCard({ task, members, onClick, onNudge }) {
   const memberName = members.find(m => m.id === task.assigned_to)?.name || task.assigned_to;
   const dl = task.deadline ? deadlineLabel(task.deadline) : null;
 
@@ -907,6 +914,13 @@ function TaskCard({ task, members, onClick }) {
           <span className="member-chip" style={{ color: dl.urgent ? "var(--danger)" : dl.color, borderColor: dl.urgent ? "var(--track-off-border)" : "var(--border)", background: dl.urgent ? "var(--track-off-bg)" : "var(--surface2)", fontWeight: dl.urgent ? 600 : 400 }}>
             <Icon.Clock /> {formatDate(task.deadline)} · {dl.text}
           </span>
+        )}
+        {onNudge && task.status !== "completed" && task.status !== "pending_review" && (
+          <button className="member-chip" onClick={(e) => { e.stopPropagation(); onNudge(task); }}
+            style={{ cursor: "pointer", background: "var(--accent-dim)", borderColor: "var(--border2)", color: "var(--text)", marginLeft: "auto" }}
+            title="Send reminder to member">
+            <Icon.Nudge /> Nudge
+          </button>
         )}
       </div>
     </div>
@@ -1042,7 +1056,16 @@ function ordinal(n) {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-function CalendarPage({ tasks, members, currentUser, onTaskClick }) {
+function ymdInEst(date) {
+  // EST = UTC-5 (no DST), matching the cron's convention. Returns YYYY-MM-DD.
+  const est = new Date(date.getTime() - 5 * 3600 * 1000);
+  const y = est.getUTCFullYear();
+  const m = String(est.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(est.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function CalendarPage({ tasks, members, currentUser, onTaskClick, onNudge }) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const [viewDate, setViewDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedYmd, setSelectedYmd] = useState(ymdLocal(today));
@@ -1155,7 +1178,7 @@ function CalendarPage({ tasks, members, currentUser, onTaskClick }) {
         </div>
         {selectedTasks.length === 0
           ? <div className="cal-empty">No projects with deadlines on this day.</div>
-          : selectedTasks.map(t => <TaskCard key={t.id} task={t} members={members} onClick={() => onTaskClick(t)} />)
+          : selectedTasks.map(t => <TaskCard key={t.id} task={t} members={members} onClick={() => onTaskClick(t)} onNudge={onNudge} />)
         }
       </div>
     </div>
@@ -1163,7 +1186,7 @@ function CalendarPage({ tasks, members, currentUser, onTaskClick }) {
 }
 
 // ── Admin Overview ────────────────────────────────────────────────────────────
-function AdminOverview({ tasks, members, onSelectMember, overviewFilter, onCardClick, onTaskClick, clearDoneTasks }) {
+function AdminOverview({ tasks, members, onSelectMember, overviewFilter, onCardClick, onTaskClick, clearDoneTasks, onNudge }) {
   const done = tasks.filter(t => t.status === "completed").length;
   const inprog = tasks.filter(t => t.status === "in progress").length;
   const notStarted = tasks.filter(t => t.status === "not started").length;
@@ -1220,7 +1243,7 @@ function AdminOverview({ tasks, members, onSelectMember, overviewFilter, onCardC
           </div>
           {filteredTasks.length === 0
             ? <div className="empty"><div className="empty-icon">📭</div><div className="empty-label">No {filterTitle.toLowerCase()} projects.</div></div>
-            : filteredTasks.map(t => <TaskCard key={t.id} task={t} members={members} onClick={() => onTaskClick(t)} />)
+            : filteredTasks.map(t => <TaskCard key={t.id} task={t} members={members} onClick={() => onTaskClick(t)} onNudge={onNudge} />)
           }
         </>
       ) : (
@@ -1687,6 +1710,32 @@ export default function App() {
     }
   }
 
+  async function sendNudge(task) {
+    if (!task) return;
+    if (task.status === "completed" || task.status === "pending_review") return;
+    const today = ymdInEst(new Date());
+    const todaysNudges = (task.nudge_history || []).filter(t => ymdInEst(new Date(t)) === today);
+    if (todaysNudges.length >= 2) {
+      showToast("Already nudged twice today. Try again tomorrow.", "error");
+      return;
+    }
+    const member = members.find(m => m.id === task.assigned_to);
+    sendPushNotification(task.assigned_to, "Reminder from Admin", `Please update "${task.title}"`);
+    sendEmailNotification({
+      user_id: task.assigned_to,
+      type: "task_nudge",
+      task: { title: task.title, deadline: task.deadline },
+    });
+    const newHistory = [...todaysNudges, new Date().toISOString()];
+    try {
+      await sb(`tasks?id=eq.${task.id}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify({ nudge_history: newHistory }) });
+      await fetchTasks();
+      showToast(member ? `Nudge sent to ${member.name}!` : "Nudge sent!");
+    } catch (e) {
+      showToast("Nudge failed: " + e.message, "error");
+    }
+  }
+
   async function updateStatus(taskId, status) {
     const oldTask = tasks.find(t => t.id === taskId);
     const isRecurringCompletion = oldTask?.recurring && status === "completed";
@@ -1994,7 +2043,7 @@ export default function App() {
         <main className="main-content scrollbar">
           {loading && <div style={{ textAlign: "center", padding: "80px 0" }}><div className="spinner" /></div>}
 
-          {!loading && page === "overview" && isAdmin && <AdminOverview tasks={tasks} members={members} onSelectMember={(memberId) => { setFilterMember(memberId); setPage("tasks"); }} overviewFilter={overviewFilter} onCardClick={setOverviewFilter} onTaskClick={setSelectedTask} clearDoneTasks={clearDoneTasks} />}
+          {!loading && page === "overview" && isAdmin && <AdminOverview tasks={tasks} members={members} onSelectMember={(memberId) => { setFilterMember(memberId); setPage("tasks"); }} overviewFilter={overviewFilter} onCardClick={setOverviewFilter} onTaskClick={setSelectedTask} clearDoneTasks={clearDoneTasks} onNudge={isAdmin ? sendNudge : null} />}
 
           {!loading && page === "calendar" && (
             <CalendarPage
@@ -2002,6 +2051,7 @@ export default function App() {
               members={members}
               currentUser={currentUser}
               onTaskClick={setSelectedTask}
+              onNudge={isAdmin ? sendNudge : null}
             />
           )}
 
@@ -2024,7 +2074,7 @@ export default function App() {
                 : tasks.filter(t => t.needs_attention).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).map(t => (
                     <div key={t.id} style={{ background: "var(--surface)", border: "1px solid var(--attn-border)", borderRadius: 10, marginBottom: 12, overflow: "hidden" }}>
                       <div onClick={() => setSelectedTask(t)} style={{ cursor: "pointer" }}>
-                        <TaskCard task={t} members={members} onClick={() => setSelectedTask(t)} />
+                        <TaskCard task={t} members={members} onClick={() => setSelectedTask(t)} onNudge={isAdmin ? sendNudge : null} />
                       </div>
                       <div style={{ borderTop: "1px solid var(--attn-border)", padding: "10px 22px", background: "var(--attn-bg)", display: "flex", alignItems: "center", gap: 12 }}>
                         <span style={{ fontSize: 12, color: "var(--attn-text)", fontWeight: 500 }}>🔔 Flagged for your attention</span>
@@ -2145,6 +2195,11 @@ export default function App() {
                                   {t.track_status === "on_track" ? <><Icon.Track /> On Track</> : <><Icon.OffTrack /> Off Track</>}
                                 </span>
                               )}
+                              {t.recurring && (
+                                <span className="tag" style={{ background: "var(--accent-dim)", color: "var(--text2)", border: "1px solid var(--border2)" }}>
+                                  <Icon.Refresh /> Monthly · {ordinal(t.recurring_day)}
+                                </span>
+                              )}
                             </div>
                             <span className="text-sm" style={{ fontSize: 11 }}>#{t.id}</span>
                           </div>
@@ -2158,6 +2213,13 @@ export default function App() {
                                 <Icon.Clock /> {formatDate(t.deadline)} · {dl.text}
                               </span>
                             ); })()}
+                            {isAdmin && t.status !== "completed" && t.status !== "pending_review" && (
+                              <button className="member-chip" onClick={(e) => { e.stopPropagation(); sendNudge(t); }}
+                                style={{ cursor: "pointer", background: "var(--accent-dim)", borderColor: "var(--border2)", color: "var(--text)", marginLeft: "auto" }}
+                                title="Send reminder to member">
+                                <Icon.Nudge /> Nudge
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -2336,7 +2398,7 @@ export default function App() {
       {showAddMember && <AddMemberModal existingUsers={users} onClose={() => setShowAddMember(false)} onAdd={addMember} />}
       {showDeleteMember && <DeleteMemberModal users={members} tasks={tasks} onClose={() => setShowDeleteMember(false)} onDelete={deleteMember} />}
       {showChangePassword && <ChangePasswordModal currentUser={currentUser} onClose={() => setShowChangePassword(false)} onSave={resetPassword} />}
-      {selectedTask && <TaskModal task={selectedTask} currentUser={currentUser} members={members} onClose={() => setSelectedTask(null)} onUpdateStatus={updateStatus} onAddComment={addComment} onUpdateTrack={updateTrack} onToggleAttention={toggleAttention} onDeleteTask={deleteTask} onUpdateDeadline={updateDeadline} />}
+      {selectedTask && <TaskModal task={selectedTask} currentUser={currentUser} members={members} onClose={() => setSelectedTask(null)} onUpdateStatus={updateStatus} onAddComment={addComment} onUpdateTrack={updateTrack} onToggleAttention={toggleAttention} onDeleteTask={deleteTask} onUpdateDeadline={updateDeadline} onNudge={isAdmin ? sendNudge : null} />}
 
       {showAttentionPopup && isAdmin && (
         <div className="modal-backdrop" onClick={() => setShowAttentionPopup(false)}>

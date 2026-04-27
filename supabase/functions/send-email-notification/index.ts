@@ -123,6 +123,27 @@ function commentAddedHtml(task: { title: string }, comment: { author: string; te
   return wrap("New Comment", "#27664A", task.title, body);
 }
 
+function taskNudgeHtml(task: { title: string; deadline?: string }) {
+  const deadlineRow = task.deadline ? `
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#F5F4F0;border:1px solid #E8E6E0;border-radius:6px;overflow:hidden;margin-bottom:20px">
+      <tr>
+        <td style="padding:14px 18px">
+          <div style="font-family:'Inter',sans-serif;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#A8A49C;margin-bottom:6px">Deadline</div>
+          <div style="font-family:'Inter',sans-serif;font-size:13px;color:#1A1916;font-weight:500">${formatDateEmail(task.deadline)}</div>
+        </td>
+      </tr>
+    </table>` : "";
+  const body = `
+    <div style="font-size:13px;color:#6B6860;line-height:1.7;margin-bottom:20px">
+      A friendly reminder from your admin to update the status of this project.
+    </div>
+    ${deadlineRow}
+    <div style="text-align:center">
+      <span style="font-family:'Inter',sans-serif;font-size:12px;color:#A8A49C">Log in to Hiveboard to update your progress.</span>
+    </div>`;
+  return wrap("Reminder", "#B45309", task.title, body);
+}
+
 function taskPendingReviewHtml(task: { title: string }, submittedBy: string) {
   const body = `
     <div style="font-size:13px;color:#6B6860;line-height:1.7;margin-bottom:20px">
@@ -241,6 +262,10 @@ Deno.serve(async (req) => {
       case "task_review_completed":
         subject = approved ? `Project Approved: ${task.title}` : `Revision Needed: ${task.title}`;
         html = taskReviewCompletedHtml(task, approved, reason);
+        break;
+      case "task_nudge":
+        subject = `Reminder: ${task.title}`;
+        html = taskNudgeHtml(task);
         break;
       default:
         return new Response(JSON.stringify({ ok: false, reason: "unknown_type" }), {
