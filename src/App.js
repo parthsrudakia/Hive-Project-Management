@@ -1283,7 +1283,7 @@ function CalendarPage({ tasks, members, currentUser, onTaskClick, onNudge }) {
 }
 
 // ── Admin Overview ────────────────────────────────────────────────────────────
-function AdminOverview({ tasks, members, onSelectMember, overviewFilter, onCardClick, onTaskClick, clearDoneTasks, onNudge }) {
+function AdminOverview({ tasks, members, users, onSelectMember, overviewFilter, onCardClick, onTaskClick, clearDoneTasks, onNudge, onGoToCalendar }) {
   const done = tasks.filter(t => t.status === "completed").length;
   const inprog = tasks.filter(t => t.status === "in progress").length;
   const notStarted = tasks.filter(t => t.status === "not started").length;
@@ -1328,6 +1328,8 @@ function AdminOverview({ tasks, members, onSelectMember, overviewFilter, onCardC
         ))}
       </div>
 
+      <div className="projects-layout">
+        <div className="projects-main">
       {filteredTasks ? (
         <>
           <div className="flex items-center justify-between mb-16">
@@ -1382,6 +1384,72 @@ function AdminOverview({ tasks, members, onSelectMember, overviewFilter, onCardC
       })}
         </>
       )}
+        </div>
+
+        <aside className="projects-rail">
+          {(() => {
+            const activeAll = tasks.filter(t => t.status !== "completed" && t.status !== "pending_review");
+            const upcoming = activeAll
+              .filter(t => t.deadline && daysUntil(t.deadline) <= 7)
+              .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
+              .slice(0, 6);
+            const recentActivity = tasks
+              .filter(t => t.comments && t.comments.length > 0)
+              .map(t => {
+                const lastComment = t.comments.reduce((latest, c) =>
+                  new Date(c.created_at) > new Date(latest.created_at) ? c : latest
+                );
+                return { task: t, lastComment };
+              })
+              .sort((a, b) => new Date(b.lastComment.created_at) - new Date(a.lastComment.created_at))
+              .slice(0, 5);
+            return (
+              <>
+                <div className="rail-card">
+                  <div className="rail-card-title">Upcoming · 7 days</div>
+                  {upcoming.length === 0
+                    ? <div className="rail-empty">No deadlines in the next 7 days.</div>
+                    : upcoming.map(t => {
+                        const dl = deadlineLabel(t.deadline);
+                        return (
+                          <div key={t.id} className="rail-row" onClick={() => onTaskClick(t)}>
+                            <div className="rail-row-title">{t.title}</div>
+                            <div className="rail-row-meta">
+                              <span>{members.find(m => m.id === t.assigned_to)?.name || t.assigned_to}</span>
+                              <span style={{ color: dl.urgent ? "var(--danger)" : "var(--text3)", fontWeight: dl.urgent ? 600 : 500 }}>· {dl.text}</span>
+                            </div>
+                          </div>
+                        );
+                      })
+                  }
+                </div>
+
+                <div className="rail-card">
+                  <div className="rail-card-title">Recent activity</div>
+                  {recentActivity.length === 0
+                    ? <div className="rail-empty">No comments yet.</div>
+                    : recentActivity.map(({ task: t, lastComment: c }) => (
+                        <div key={t.id} className="rail-row" onClick={() => onTaskClick(t)}>
+                          <div className="rail-row-title">{t.title}</div>
+                          <div className="rail-row-meta">
+                            <Icon.Comment />
+                            <span>{members.find(m => m.id === c.author)?.name || (users && users.find(u => u.id === c.author)?.name) || c.author}</span>
+                            <span>· {relTime(c.created_at)}</span>
+                          </div>
+                        </div>
+                      ))
+                  }
+                </div>
+
+                <div className="rail-card">
+                  <div className="rail-card-title">This month</div>
+                  <MiniCalendar tasks={tasks} onDayClick={() => onGoToCalendar && onGoToCalendar()} />
+                </div>
+              </>
+            );
+          })()}
+        </aside>
+      </div>
     </div>
   );
 }
@@ -2140,7 +2208,7 @@ export default function App() {
         <main className="main-content scrollbar">
           {loading && <div style={{ textAlign: "center", padding: "80px 0" }}><div className="spinner" /></div>}
 
-          {!loading && page === "overview" && isAdmin && <AdminOverview tasks={tasks} members={members} onSelectMember={(memberId) => { setFilterMember(memberId); setPage("tasks"); }} overviewFilter={overviewFilter} onCardClick={setOverviewFilter} onTaskClick={setSelectedTask} clearDoneTasks={clearDoneTasks} onNudge={isAdmin ? sendNudge : null} />}
+          {!loading && page === "overview" && isAdmin && <AdminOverview tasks={tasks} members={members} users={users} onSelectMember={(memberId) => { setFilterMember(memberId); setPage("tasks"); }} overviewFilter={overviewFilter} onCardClick={setOverviewFilter} onTaskClick={setSelectedTask} clearDoneTasks={clearDoneTasks} onNudge={isAdmin ? sendNudge : null} onGoToCalendar={() => setPage("calendar")} />}
 
           {!loading && page === "calendar" && (
             <CalendarPage
