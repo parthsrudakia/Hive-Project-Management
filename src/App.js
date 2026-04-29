@@ -2284,37 +2284,44 @@ export default function App() {
               <div className="projects-layout">
                 <div className="projects-main">
               <div className="flex gap-8 flex-wrap items-center mb-16">
-                {isAdmin && (
-                  <select value={filterMember} onChange={e => setFilterMember(e.target.value)} style={{
-                    padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
-                    background: filterMember !== "all" ? "var(--accent-dim)" : "var(--surface2)",
-                    color: filterMember !== "all" ? "var(--accent)" : "var(--text3)",
-                    border: `1.5px solid ${filterMember !== "all" ? "var(--accent)" : "var(--border)"}`,
+                {(() => {
+                  const chevron = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M3 4.5l3 3 3-3' stroke='%23888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>\")";
+                  const selStyle = (active) => ({
+                    appearance: "none", WebkitAppearance: "none", MozAppearance: "none",
+                    padding: "4px 22px 4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, lineHeight: 1.4,
+                    backgroundColor: active ? "var(--accent-dim)" : "var(--surface2)",
+                    backgroundImage: chevron,
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "right 6px center",
+                    backgroundSize: "10px",
+                    color: active ? "var(--accent)" : "var(--text3)",
+                    border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
                     cursor: "pointer", outline: "none", transition: "all .15s",
-                  }}>
-                    <option value="all">All Members</option>
-                    {members.map(m => <option key={m.id} value={m.id}>{m.name} · {m.id}</option>)}
-                  </select>
-                )}
-                <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{
-                  padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
-                  background: sortBy !== "default" ? "var(--accent-dim)" : "var(--surface2)",
-                  color: sortBy !== "default" ? "var(--accent)" : "var(--text3)",
-                  border: `1.5px solid ${sortBy !== "default" ? "var(--accent)" : "var(--border)"}`,
-                  cursor: "pointer", outline: "none", transition: "all .15s",
-                }}>
-                  <option value="default">Sort: Default</option>
-                  <option value="deadline">Sort: Deadline</option>
-                  <option value="status">Sort: Status</option>
-                  <option value="urgent">Sort: Urgent First</option>
-                </select>
-                {(glanceFilter !== null || sortBy !== "default") && (
-                  <button onClick={() => { setGlanceFilter(null); setSortBy("default"); }} style={{
-                    padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
-                    background: "none", color: "var(--text3)", border: "1.5px solid var(--border)",
-                    cursor: "pointer", transition: "all .15s",
-                  }}>Clear</button>
-                )}
+                  });
+                  return (
+                    <>
+                      {isAdmin && (
+                        <select value={filterMember} onChange={e => setFilterMember(e.target.value)} style={selStyle(filterMember !== "all")}>
+                          <option value="all">All Members</option>
+                          {members.map(m => <option key={m.id} value={m.id}>{m.name} · {m.id}</option>)}
+                        </select>
+                      )}
+                      <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={selStyle(sortBy !== "default")}>
+                        <option value="default">Sort: Default</option>
+                        <option value="deadline">Sort: Deadline</option>
+                        <option value="status">Sort: Status</option>
+                        <option value="urgent">Sort: Urgent First</option>
+                      </select>
+                      {(glanceFilter !== null || sortBy !== "default") && (
+                        <button onClick={() => { setGlanceFilter(null); setSortBy("default"); }} style={{
+                          padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, lineHeight: 1.4,
+                          background: "none", color: "var(--text3)", border: "1px solid var(--border)",
+                          cursor: "pointer", transition: "all .15s",
+                        }}>Clear</button>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               {activeTasks.length === 0
