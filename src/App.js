@@ -2286,27 +2286,29 @@ export default function App() {
               <div className="flex gap-8 flex-wrap items-center mb-16">
                 {(() => {
                   const chevron = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M3 4.5l3 3 3-3' stroke='%23888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>\")";
-                  const selStyle = (active) => ({
+                  const selStyle = (active, width) => ({
                     appearance: "none", WebkitAppearance: "none", MozAppearance: "none",
-                    padding: "4px 22px 4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, lineHeight: 1.4,
+                    width, boxSizing: "border-box",
+                    padding: "4px 20px 4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600, lineHeight: 1.4,
                     backgroundColor: active ? "var(--accent-dim)" : "var(--surface2)",
                     backgroundImage: chevron,
                     backgroundRepeat: "no-repeat",
-                    backgroundPosition: "right 6px center",
-                    backgroundSize: "10px",
+                    backgroundPosition: "right 5px center",
+                    backgroundSize: "9px",
                     color: active ? "var(--accent)" : "var(--text3)",
                     border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
                     cursor: "pointer", outline: "none", transition: "all .15s",
+                    textOverflow: "ellipsis", whiteSpace: "nowrap", overflow: "hidden",
                   });
                   return (
                     <>
                       {isAdmin && (
-                        <select value={filterMember} onChange={e => setFilterMember(e.target.value)} style={selStyle(filterMember !== "all")}>
+                        <select value={filterMember} onChange={e => setFilterMember(e.target.value)} style={selStyle(filterMember !== "all", 110)}>
                           <option value="all">All Members</option>
                           {members.map(m => <option key={m.id} value={m.id}>{m.name} · {m.id}</option>)}
                         </select>
                       )}
-                      <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={selStyle(sortBy !== "default")}>
+                      <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={selStyle(sortBy !== "default", 95)}>
                         <option value="default">Sort: Default</option>
                         <option value="deadline">Sort: Deadline</option>
                         <option value="status">Sort: Status</option>
