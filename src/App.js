@@ -187,7 +187,6 @@ const Icon = {
   Refresh:  () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12.5 7a5.5 5.5 0 11-1.7-3.95"/><path d="M13 1.5v3.5h-3.5"/></svg>,
   Bell:     () => <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M7 1.5a4 4 0 014 4v3l1 1H2l1-1v-3a4 4 0 014-4z" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinejoin="round"/><path d="M5.5 11.5a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>,
   Track:    () => <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M4.5 7l2 2 3-3" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>,
-  OffTrack: () => <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3" fill="none"/><path d="M5 5l4 4M9 5l-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
   Settings: () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="7" cy="7" r="2.2"/><path d="M7 1.5v1M7 11.5v1M1.5 7h1M11.5 7h1M2.9 2.9l.7.7M10.4 10.4l.7.7M11.1 2.9l-.7.7M3.6 10.4l-.7.7"/></svg>,
   Moon:     () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M12.5 7.5a5.5 5.5 0 01-6-6 5.5 5.5 0 106 6z"/></svg>,
   Sun:      () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><circle cx="7" cy="7" r="3"/><path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.75 2.75l1.06 1.06M10.19 10.19l1.06 1.06M11.25 2.75l-1.06 1.06M3.81 10.19l-1.06 1.06"/></svg>,
@@ -466,7 +465,7 @@ function StatusPill({ status }) {
 }
 
 // ── Task Modal ────────────────────────────────────────────────────────────────
-function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddComment, onUpdateTrack, onToggleAttention, onDeleteTask, onUpdateDeadline, onNudge }) {
+function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddComment, onToggleAttention, onDeleteTask, onUpdateDeadline, onNudge }) {
   const [comment, setComment] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -605,28 +604,6 @@ function TaskModal({ task, currentUser, members, onClose, onUpdateStatus, onAddC
             {task.recurring && (
               <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 8 }}>Marking complete rolls this task to next month's deadline. No admin approval needed.</div>
             )}
-          </div>
-        )}
-
-        {!isAdmin && (
-          <div className="mb-16">
-            <label>Is this project on track?</label>
-            <div className="flex gap-8">
-              <button onClick={() => onUpdateTrack(task.id, "on_track")} disabled={saving} style={{
-                padding: "7px 16px", borderRadius: 99, cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
-                background: task.track_status === "on_track" ? "var(--track-on-bg)" : "var(--surface2)",
-                color: task.track_status === "on_track" ? "var(--track-on-text)" : "var(--text3)",
-                border: `1.5px solid ${task.track_status === "on_track" ? "var(--track-on-border)" : "var(--border)"}`,
-                fontWeight: 600, fontSize: 12,
-              }}><Icon.Track /> On Track</button>
-              <button onClick={() => onUpdateTrack(task.id, "off_track")} disabled={saving} style={{
-                padding: "7px 16px", borderRadius: 99, cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
-                background: task.track_status === "off_track" ? "var(--track-off-bg)" : "var(--surface2)",
-                color: task.track_status === "off_track" ? "var(--track-off-text)" : "var(--text3)",
-                border: `1.5px solid ${task.track_status === "off_track" ? "var(--track-off-border)" : "var(--border)"}`,
-                fontWeight: 600, fontSize: 12,
-              }}><Icon.OffTrack /> Off Track</button>
-            </div>
           </div>
         )}
 
@@ -918,11 +895,6 @@ function TaskCard({ task, members, onClick, onNudge }) {
   const memberName = members.find(m => m.id === task.assigned_to)?.name || task.assigned_to;
   const dl = task.deadline ? deadlineLabel(task.deadline) : null;
 
-  const trackColors = {
-    "on_track":  { bg: "var(--track-on-bg)", border: "var(--track-on-border)", text: "var(--track-on-text)" },
-    "off_track": { bg: "var(--track-off-bg)", border: "var(--track-off-border)", text: "var(--track-off-text)" },
-  };
-
   return (
     <div className={`task-card fadein ${task.urgent ? "urgent" : ""}`} onClick={onClick}>
       <div className="flex items-center justify-between mb-8">
@@ -932,11 +904,6 @@ function TaskCard({ task, members, onClick, onNudge }) {
           {task.needs_attention && (
             <span className="tag" style={{ background: "var(--attn-bg)", color: "var(--attn-text)", border: "1px solid var(--attn-border)" }}>
               <Icon.Bell /> Needs Attention
-            </span>
-          )}
-          {task.track_status && (
-            <span className="tag" style={trackColors[task.track_status] ? { background: trackColors[task.track_status].bg, color: trackColors[task.track_status].text, border: `1px solid ${trackColors[task.track_status].border}` } : {}}>
-              {task.track_status === "on_track" ? <><Icon.Track /> On Track</> : <><Icon.OffTrack /> Off Track</>}
             </span>
           )}
           {task.recurring && (
@@ -2001,17 +1968,6 @@ export default function App() {
     }
   }
 
-  async function updateTrack(taskId, track_status) {
-    const oldTask = tasks.find(t => t.id === taskId);
-    await sb(`tasks?id=eq.${taskId}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify({ track_status }) });
-    const updated = await fetchTasks();
-    const fresh = (updated || []).find(t => t.id === taskId);
-    if (fresh && selectedTask?.id === taskId) setSelectedTask(fresh);
-    if (oldTask && isAdmin) {
-      queueEmailChange(oldTask.assigned_to, oldTask.title, { field: "Track Status", from: oldTask.track_status || "Not set", to: track_status });
-    }
-  }
-
   async function toggleAttention(taskId, needs_attention) {
     await sb(`tasks?id=eq.${taskId}`, { method: "PATCH", prefer: "return=representation", body: JSON.stringify({ needs_attention }) });
     const updated = await fetchTasks();
@@ -2101,7 +2057,6 @@ export default function App() {
   else if (glanceFilter === "not started") filteredActive = filteredActive.filter(t => t.status === "not started");
   else if (glanceFilter === "urgent") filteredActive = filteredActive.filter(t => t.urgent);
   else if (glanceFilter === "overdue") filteredActive = filteredActive.filter(t => t.deadline && daysUntil(t.deadline) < 0);
-  else if (glanceFilter === "off_track") filteredActive = filteredActive.filter(t => t.track_status === "off_track");
   else if (glanceFilter === "needs_attn") filteredActive = filteredActive.filter(t => t.needs_attention);
   const activeTasks = [...filteredActive].sort(sortFn);
   const completedTasks = [...allVisible.filter(t => t.status === "completed")].sort(sortFn);
@@ -2343,11 +2298,6 @@ export default function App() {
                               <StatusPill status={t.status} />
                               {t.urgent && <span className="tag tag-urgent"><Icon.Urgent /> Urgent</span>}
                               {t.needs_attention && <span className="tag" style={{ background: "var(--attn-bg)", color: "var(--attn-text)", border: "1px solid var(--attn-border)" }}><Icon.Bell /> Needs Attention</span>}
-                              {t.track_status && (
-                                <span className="tag" style={t.track_status === "on_track" ? { background: "var(--track-on-bg)", color: "var(--track-on-text)", border: "1px solid var(--track-on-border)" } : { background: "var(--track-off-bg)", color: "var(--track-off-text)", border: "1px solid var(--track-off-border)" }}>
-                                  {t.track_status === "on_track" ? <><Icon.Track /> On Track</> : <><Icon.OffTrack /> Off Track</>}
-                                </span>
-                              )}
                               {t.recurring && (
                                 <span className="tag" style={{ background: "var(--accent-dim)", color: "var(--text2)", border: "1px solid var(--border2)" }}>
                                   <Icon.Recurring /> Monthly · {ordinal(t.recurring_day)}
@@ -2387,7 +2337,6 @@ export default function App() {
                     const inProgressN = activeVisible.filter(t => t.status === "in progress").length;
                     const notStartedN = activeVisible.filter(t => t.status === "not started").length;
                     const urgentN = activeVisible.filter(t => t.urgent).length;
-                    const offTrackN = activeVisible.filter(t => t.track_status === "off_track").length;
                     const needsAttnN = activeVisible.filter(t => t.needs_attention).length;
                     const overdueN = activeVisible.filter(t => t.deadline && daysUntil(t.deadline) < 0).length;
                     const upcoming = activeVisible
@@ -2414,7 +2363,6 @@ export default function App() {
                             { key: "not started", label: "Not started", num: notStartedN, color: "var(--danger)" },
                             { key: "urgent",      label: "Urgent",      num: urgentN,     color: "var(--danger)" },
                             { key: "overdue",     label: "Overdue",     num: overdueN,    color: "var(--danger)" },
-                            { key: "off_track",   label: "Off track",   num: offTrackN,   color: "var(--track-off-text)" },
                             { key: "needs_attn",  label: "Needs attn",  num: needsAttnN,  color: "var(--attn-text)" },
                           ];
                           return (
@@ -2653,7 +2601,7 @@ export default function App() {
       {showAddMember && <AddMemberModal existingUsers={users} onClose={() => setShowAddMember(false)} onAdd={addMember} />}
       {showDeleteMember && <DeleteMemberModal users={members} tasks={tasks} onClose={() => setShowDeleteMember(false)} onDelete={deleteMember} />}
       {showChangePassword && <ChangePasswordModal currentUser={currentUser} onClose={() => setShowChangePassword(false)} onSave={resetPassword} />}
-      {selectedTask && <TaskModal task={selectedTask} currentUser={currentUser} members={members} onClose={() => setSelectedTask(null)} onUpdateStatus={updateStatus} onAddComment={addComment} onUpdateTrack={updateTrack} onToggleAttention={toggleAttention} onDeleteTask={deleteTask} onUpdateDeadline={updateDeadline} onNudge={isAdmin ? sendNudge : null} />}
+      {selectedTask && <TaskModal task={selectedTask} currentUser={currentUser} members={members} onClose={() => setSelectedTask(null)} onUpdateStatus={updateStatus} onAddComment={addComment} onToggleAttention={toggleAttention} onDeleteTask={deleteTask} onUpdateDeadline={updateDeadline} onNudge={isAdmin ? sendNudge : null} />}
 
       {showAttentionPopup && isAdmin && (
         <div className="modal-backdrop" onClick={() => setShowAttentionPopup(false)}>
